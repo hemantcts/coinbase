@@ -35,8 +35,10 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(status_code=403, detail="set DASHBOARD_TOKEN to enable controls")
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return TEMPLATE.read_text(encoding="utf-8")
+    def index() -> HTMLResponse:
+        # Never let browsers (phones especially) keep a stale copy of the page after a deploy.
+        return HTMLResponse(TEMPLATE.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
     @app.get("/api/state", dependencies=[Depends(auth)])
     def state() -> dict[str, Any]:
