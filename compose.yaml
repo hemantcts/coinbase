@@ -2,9 +2,28 @@ services:
   trader:
     build: .
     env_file: .env
+    command: ["python", "-m", "trader", "paper"]
     restart: unless-stopped
     volumes:
       - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  dashboard:
+    build: .
+    env_file: .env
+    command: ["python", "-m", "trader", "dashboard"]
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    # Bound to localhost on the host: reach it through an SSH tunnel, never expose it publicly.
+    ports:
+      - "127.0.0.1:8080:8080"
     read_only: true
     tmpfs:
       - /tmp

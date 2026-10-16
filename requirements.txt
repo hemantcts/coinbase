@@ -1,2 +1,6 @@
 httpx>=0.27,<1
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
 pytest>=8,<10
+# Live trading only (Coinbase Advanced Trade SDK). Not needed for backtests, paper trading or the dashboard.
+# coinbase-advanced-py>=1.8

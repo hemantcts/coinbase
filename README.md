@@ -1,52 +1,172 @@
-# Coinbase Paper Trading Agent v0.1
+# Coinbase AI Trader
 
-A research prototype with **no authenticated Coinbase connection and no live trading code**. Uses public Coinbase Exchange candle data for BTC-EUR and ETH-EUR. Strategy is deterministic SMA/momentum, **not a trained AI model**.
+Autonomous spot-trading agent for Coinbase with an independent risk controller,
+three strategies, backtesting, paper trading, a web dashboard with an emergency
+stop, an automatic release gate and a gated live mode.
 
-## Quick start (European VPS with Docker)
+Version 0.2 implements the full architecture from the project brief. It ships
+with real orders **locked**: the live broker refuses to start unless the release
+gate has passed and the owner has armed it by hand (see *Going live*).
+
+This is educational software, not investment advice. Crypto can lose a large
+part of its value in a day. The loss limits are shut-off thresholds, not
+guarantees: gaps, outages and unfilled orders can cause larger losses.
+
+## How it works
+
+```
+market data ──> strategies ──> risk controller ──> broker ──> ledger ──> SQLite ──> dashboard
+ (Coinbase       trend          position caps        paper      cash,     orders,    equity, trades,
+  public API)    momentum       exposure/reserve     or live    positions fills,     events, health,
+                 mean rev.      loss limits                     P&L       state     STOP / FLATTEN
+                 ensemble       cost-aware edge
+```
+
+* **Strategies** (`trader/strategies/`) only see candles and return a signal
+  with an *estimate* of the favourable move. They never see the account.
+* **Risk controller** (`trader/risk.py`) reviews every order: max position,
+  max invested, cash reserve, risk per trade, daily and total loss limits,
+  max new positions per day, exchange minimums, and a cost filter: the
+  expected move must beat the round-trip fee + slippage by a safety margin.
+  A halt blocks new buys; exits, stop-loss and take-profit always go through.
+* **Engine** (`trader/engine.py`) runs one cycle per closed candle. Orders get
+  deterministic client ids, are written to the database *before* submission
+  and never re-run for a candle that was already processed. Restarts restore
+  cash, positions and last prices atomically.
+* **Ledger** (`trader/portfolio.py`) applies fills: same code for paper and live.
+* **FX** (`trader/fx.py`): the account thinks in CHF, the pairs trade in EUR.
+  The CHF→EUR rate is fetched from ECB reference rates (frankfurter.app) and
+  stored with its timestamp; every snapshot records the rate it used.
+
+## Risk profiles
+
+Limits are fractions of the starting capital so the same profile works for
+any amount. `python -m trader profiles` prints them in money:
+
+| profile | max position | max invested | reserve | risk/trade | daily loss | total loss | new/day | stop | target | edge vs costs |
+|---|---|---|---|---|---|---|---|---|---|---|
+| low    | 15 % | 40 % | 60 % | 0.25 % | 1 % | 5 %  | 2 | 1.5 % | 3 % | 2.0× |
+| medium | 25 % | 60 % | 40 % | 0.5 %  | 2 % | 8 %  | 4 | 2 %   | 4 % | 1.5× |
+| high   | 35 % | 80 % | 20 % | 1 %    | 4 % | 15 % | 6 | 3 %   | 6 % | 1.2× |
+
+`medium` on CHF 1 000 is the configuration from the brief: 250 / 600 / 400 / 5 / 20 / 80 CHF, four new positions per day.
+The live pilot additionally caps every profile at 10 % per position and 20 % invested (CHF 100 / 200).
+
+## Quick start
 
 ```bash
-cp .env.example .env
-mkdir -p data
-chmod 700 data
-# Edit .env if needed; LIVE_TRADING must remain false.
+python -m venv .venv && . .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                                  # edit as needed
+pytest -q                                             # 38 tests
+
+python -m trader profiles                             # limits in CHF
+python -m trader fetch-history --days 120             # cache BTC-EUR / ETH-EUR 5-minute candles
+python -m trader backtest --strategy all --profile all --days 90
+python -m trader backtest --strategy ensemble --profile medium --days 120 --walk-forward --json backtest.json
+python -m trader paper                                # paper trade on live market data (Ctrl-C to stop)
+python -m trader dashboard                            # http://127.0.0.1:8080
+python -m trader status
+python -m trader control stop | resume | flatten
+```
+
+Set `DATA_DIR=./data` in `.env` when running outside Docker.
+
+## Backtesting
+
+`backtest` replays cached candles through the exact same engine, risk
+controller and paper broker, with fees and slippage. It reports net return,
+max drawdown, round trips, win rate, profit factor, fee drag, a daily-return
+Sharpe ratio, time in market and how many exits were stop-loss or take-profit.
+`--walk-forward` splits the period 60/40 into in-sample and out-of-sample.
+A strategy that only looks good in-sample is curve-fit; the gate uses the
+out-of-sample half.
+
+## Release gate: Phase A, B, C
+
+The agent will not trade real money until `python -m trader gate` passes.
+It writes `data/gate_result.json`, valid for 7 days and tied to the configured
+strategy and profile.
+
+**Phase A, historical simulation** (out-of-sample half of the backtest)
+positive net return · max drawdown below the total loss limit · at least 5
+round trips · no total-loss halt · fees below half of the gross profit.
+
+**Phase B, paper trading** (at least 72 h, read from the paper database)
+duration ≥ 72 h · no gap > 30 min between cycles · still running · error rate
+≤ 2 % · no duplicate positions · no buys after a halt on the same day · FX
+rate recorded from the live source · database never ran in live mode.
+
+**Phase C, real-money pilot** then starts with the pilot caps (CHF 100 per
+position, CHF 200 invested) and the owner raises limits by hand after review.
+
+## Going live
+
+Every one of these is required; any missing one makes `python -m trader live` refuse to start.
+
+1. Coinbase account: create a **separate portfolio** for the agent and an
+   Advanced Trade API key scoped to it with **view + trade only**. Never grant
+   transfer or withdrawal rights. Restrict the key to the server IP if offered.
+2. `pip install coinbase-advanced-py`, set `COINBASE_API_KEY` and
+   `COINBASE_API_SECRET` in `.env` (never commit them), then run
+   `python -m trader verify-live`. It checks the key permissions, prints
+   balances and the product limits, and fails if the key can transfer funds.
+3. Read the real fee tier from the account and set `FEE_RATE` to match.
+4. `python -m trader gate` must print `RESULT: PASS`.
+5. Use a **fresh database** for live: `DB_PATH=/data/live.sqlite3`.
+6. Set `LIVE_TRADING=true` and write the arming sentence into `data/LIVE_ARMED`:
+   `I approve live trading with real money and accept the risk of loss.`
+7. Start with `python -m trader live` (or change the compose command).
+
+Emergency: `python -m trader control stop` (no new buys, exits continue),
+`control flatten` (sell everything, then stop), `control disarm` (delete the
+arming file and stop). The dashboard has the same three buttons, protected
+by `DASHBOARD_TOKEN`. Disabling the API key in Coinbase stops everything.
+
+## Deployment (EU VPS, Docker)
+
+```bash
+cp .env.example .env && mkdir -p data && chmod 700 data
+sudo chown 10001:10001 data              # the container runs as uid 10001
 docker compose up -d --build
 docker compose logs -f trader
+ssh -L 8080:127.0.0.1:8080 user@server      # then open http://127.0.0.1:8080
 ```
 
-Run tests locally: `python -m pip install -r requirements.txt && pytest -q`.
+The containers run read-only, unprivileged, with all capabilities dropped.
+The dashboard port is bound to localhost on the host; reach it through an SSH
+tunnel. Harden the host: SSH keys only, firewall with no inbound app ports,
+automatic security updates, encrypted backups of `data/`.
 
-Backtest an existing historical CSV (chronological, columns `timestamp,close`, timestamps ISO 8601 UTC):
+## Layout
 
-```bash
-python -m agent.main backtest historical.csv --capital 1000 --fee 0.006 --slippage 0.001
+```
+trader/
+  config.py        settings from .env, risk profiles, pilot caps
+  models.py        Candle, Signal, Order, Position, PortfolioState
+  indicators.py    SMA/EMA/RSI/ATR/z-score/volatility, no lookahead
+  strategies/      trend, momentum, mean_reversion, ensemble
+  risk.py          risk controller + exchange product constraints
+  execution/       broker interface, paper broker, Coinbase Advanced Trade (gated)
+  portfolio.py     ledger: fills -> cash, positions, realised P&L
+  store.py         SQLite: candles, orders, state, snapshots, events, FX
+  fx.py            CHF/EUR with timestamps
+  data.py          Coinbase public candles, history download, backtest source
+  engine.py        the cycle: data -> risk -> execute -> persist
+  backtest.py      metrics, strategy comparison, walk-forward
+  gate.py          Phase A/B checks, gate_result.json
+  dashboard/       FastAPI + single-page UI with emergency controls
+  cli.py           python -m trader ...
+tests/             38 unit and integration tests
 ```
 
-Results are in EUR, not CHF. The initial EUR 1000 is a **placeholder**, not equivalent to CHF 1000. Before funding or reporting CHF P&L, implement audited CHF/EUR FX conversion with timestamps and conversion costs.
+## Known limitations
 
-## Current scope and important limitations
-
-- Coinbase Exchange public REST candles only; does not use Coinbase Advanced Trade authenticated API. Product availability and API behavior must be verified at deployment. Requests can be rate limited.
-- Paper trades are simulated using candle close plus configured slippage and fees, not actual bid/ask or fills. No claim of profitability.
-- Only a baseline trend/momentum signal is implemented. No LLM, trained predictive model, sentiment or optimization yet.
-- Data gaps, delistings, latency, spread, minimum order size and exchange constraints are not modeled.
-- The 2% daily and 8% overall limits halt **all** trading including sales in this prototype; this is a conservative fail-closed paper behavior, **not** an adequate live risk/exit policy.
-- Day-start equity restoration on restart is approximate; persisted holdings can be temporarily valued at zero before first successful refresh. For serious paper/live deployment, persist last prices, true day-start equity, order IDs, candle IDs and durable trading state, and restore atomically.
-- Repeated candle after a process restart may be reconsidered; position duplication is prevented only for held assets, not for all possible state transitions. Persist processed candle IDs for production.
-- The system is not production-ready. A production build needs robust reconciliation, idempotent order submission, minimum sizes, exchange precision, authenticated read-only verification, separate execution service, secrets management, monitoring, alerting, stop-loss handling, comprehensive tests and manual live enablement.
-- No dashboard yet; inspect `data/trades.sqlite3` and container logs.
-
-## Deployment security
-
-Choose an EU/EEA VPS (e.g. Frankfurt), hardened Linux host, SSH keys only, firewall with no inbound application ports, automatic security updates, encrypted backups and secret manager. Docker container is read-only, with dropped capabilities. Never store Coinbase passwords or API keys in the repository or share them in chat. Never enable withdrawal or transfer permissions. The container currently needs **no** Coinbase API key.
-
-## Live release gate (not implemented)
-
-1. Verify Coinbase account eligibility and applicable Swiss tax/reporting requirements.
-2. Implement authenticated Advanced Trade API with a portfolio-scoped, trade-only API key, restricted privileges, secure storage and IP restrictions where supported.
-3. Implement durable order state machine with client order IDs, restart-safe reconciliation, cancellation, exchange precision and minimum sizes.
-4. Implement mark-to-market risk controls that prevent new risk but permit controlled liquidation, including failures and gap scenarios.
-5. Implement independent emergency stop, notifications, metrics, FX accounting and fee verification.
-6. Test on out-of-sample periods and run multi-day paper trading with fault injection; independently review the system.
-7. Explicit owner approval for a separate live build, with tiny initial position sizes. **Changing an environment variable cannot activate live trading in this version.**
-
-This project is educational software, not an investment recommendation. Crypto can lose substantial value.
+* Paper fills use candle close ± slippage, not the live order book.
+* The ensemble opens on the strongest cost-adjusted signal; there is no
+  trained predictive model yet. Whether one adds value is a measurement to
+  run with the backtester, not an assumption.
+* SQLite is fine for one account. A multi-tenant product needs PostgreSQL and
+  per-user keys; the code is structured so that is a storage swap, not a rewrite.
+* Live mode uses marketable limit orders cancelled after 3 minutes if unfilled;
+  partial fills are booked as positions.

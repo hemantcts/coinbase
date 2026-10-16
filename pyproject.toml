@@ -1,0 +1,16 @@
+[project]
+name = "coinbase-ai-trader"
+version = "0.2.0"
+description = "Autonomous Coinbase spot-trading agent with an independent risk controller, backtesting, paper trading and a gated live mode"
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.27,<1", "fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1"]
+
+[project.optional-dependencies]
+live = ["coinbase-advanced-py>=1.8"]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+trader = "trader.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["trader*"]

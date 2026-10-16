@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coinbase AI Trader</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --text:#e6e8ee; --muted:#8b93a7; --up:#3ecf8e; --down:#ff6b6b; --warn:#ffb020; --accent:#5b8cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; font-weight:600; }
+  .pill { padding:3px 10px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted); }
+  .pill.ok { color:var(--up); border-color:var(--up); } .pill.bad { color:var(--down); border-color:var(--down); } .pill.warn { color:var(--warn); border-color:var(--warn); }
+  main { padding:16px 20px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; min-width:0; }
+  section.wide { grid-column:1 / -1; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .kpi .v { font-size:22px; font-weight:600; } .kpi .l { color:var(--muted); font-size:12px; }
+  .up { color:var(--up); } .down { color:var(--down); }
+  table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; } .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .scroll { overflow:auto; max-height:340px; }
+  canvas { width:100%; height:220px; display:block; }
+  .controls { display:flex; gap:8px; flex-wrap:wrap; }
+  button { background:#20242e; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; }
+  button.danger { border-color:var(--down); color:var(--down); } button.ok { border-color:var(--up); color:var(--up); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .muted { color:var(--muted); font-size:12px; }
+  input { background:#0f1115; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
+  @media (max-width:640px){ main{padding:12px;} header{padding:12px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Coinbase AI Trader</h1>
+  <span class="pill" id="mode">mode</span>
+  <span class="pill" id="health">health</span>
+  <span class="pill" id="stop">stop</span>
+  <span class="pill" id="gate">gate</span>
+  <span class="muted" id="updated" style="margin-left:auto"></span>
+</header>
+<main>
+  <section class="wide">
+    <h2>Portfolio</h2>
+    <div class="kpis" id="kpis"></div>
+    <div class="muted" id="fxnote" style="margin-top:8px"></div>
+  </section>
+  <section class="wide">
+    <h2>Equity</h2>
+    <canvas id="chart" width="1200" height="220"></canvas>
+  </section>
+  <section>
+    <h2>Open positions</h2>
+    <div class="scroll"><table id="positions"></table></div>
+  </section>
+  <section>
+    <h2>Limits (risk profile)</h2>
+    <div class="scroll"><table id="limits"></table></div>
+  </section>
+  <section>
+    <h2>Emergency controls</h2>
+    <div class="controls">
+      <input id="token" placeholder="dashboard token" type="password">
+      <button class="danger" onclick="control('stop')">STOP new buys</button>
+      <button class="danger" onclick="control('flatten')">FLATTEN (sell all)</button>
+      <button class="danger" onclick="control('disarm')">DISARM live</button>
+      <button class="ok" onclick="control('resume')">Resume</button>
+    </div>
+    <div class="muted" style="margin-top:8px">STOP blocks new positions; exits, stop-loss and take-profit keep working. FLATTEN sells everything at the next cycle and then engages STOP.</div>
+    <div id="ctlmsg" class="muted"></div>
+  </section>
+  <section class="wide">
+    <h2>Recent orders</h2>
+    <div class="scroll"><table id="orders"></table></div>
+  </section>
+  <section class="wide">
+    <h2>Events</h2>
+    <div class="scroll"><table id="events"></table></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (x, d=2) => (x===null||x===undefined||isNaN(x)) ? '–' : Number(x).toLocaleString('de-CH',{minimumFractionDigits:d, maximumFractionDigits:d});
+const tokenHdr = () => { const t = $('token').value || localStorage.getItem('token') || ''; if ($('token').value) localStorage.setItem('token', $('token').value); return t ? {'X-Token': t} : {}; };
+async function api(path, opts={}) { const r = await fetch(path, {...opts, headers: {...(opts.headers||{}), ...tokenHdr()}}); if (!r.ok) throw new Error(r.status + ' ' + (await r.text())); return r.json(); }
+function table(id, rows, cols) {
+  const el = $(id); if (!rows.length) { el.innerHTML = '<tr><td class="muted">none</td></tr>'; return; }
+  el.innerHTML = '<tr>' + cols.map(c=>`<th class="${c.num?'num':''}">${c.h}</th>`).join('') + '</tr>' +
+    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.num?'num':''} ${c.cls?c.cls(r):''}">${c.f(r)}</td>`).join('') + '</tr>').join('');
+}
+function drawChart(points, initial) {
+  const cv = $('chart'), ctx = cv.getContext('2d'); const W = cv.width, H = cv.height; ctx.clearRect(0,0,W,H);
+  if (points.length < 2) { ctx.fillStyle='#8b93a7'; ctx.fillText('waiting for data', 10, 20); return; }
+  const ys = points.map(p=>p.equity); let lo = Math.min(...ys, initial), hi = Math.max(...ys, initial); if (hi===lo){hi=lo+1;} const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+  const x = i => 40 + (W-50) * i/(points.length-1), y = v => H-20 - (H-30)*(v-lo)/(hi-lo);
+  ctx.strokeStyle='#262b36'; ctx.beginPath(); ctx.moveTo(40, y(initial)); ctx.lineTo(W-10, y(initial)); ctx.stroke();
+  ctx.fillStyle='#8b93a7'; ctx.font='11px system-ui'; ctx.fillText(fmt(hi+pad,0), 2, 12); ctx.fillText(fmt(lo-pad,0), 2, H-20); ctx.fillText(points[0].ts.slice(0,16).replace('T',' '), 40, H-6); ctx.fillText(points[points.length-1].ts.slice(0,16).replace('T',' '), W-130, H-6);
+  ctx.strokeStyle = ys[ys.length-1] >= initial ? '#3ecf8e' : '#ff6b6b'; ctx.lineWidth=1.6; ctx.beginPath();
+  points.forEach((p,i)=> i ? ctx.lineTo(x(i), y(p.equity)) : ctx.moveTo(x(i), y(p.equity))); ctx.stroke();
+}
+async function refresh() {
+  try {
+    const s = await api('/api/state'); const st = s.state || {}; const h = s.health;
+    $('mode').textContent = s.mode.toUpperCase() + ' · ' + s.strategy + ' · ' + s.profile; $('mode').className = 'pill ' + (s.mode==='live' ? 'warn' : '');
+    $('health').textContent = h.stale ? 'engine stale' : 'engine running'; $('health').className = 'pill ' + (h.stale ? 'bad' : 'ok');
+    $('stop').textContent = h.flatten_pending ? 'FLATTEN pending' : (h.manual_stop ? 'STOP active' : 'trading enabled'); $('stop').className = 'pill ' + (h.manual_stop||h.flatten_pending ? 'warn' : 'ok');
+    $('gate').textContent = h.gate_passed ? 'gate passed' : 'gate not passed'; $('gate').className = 'pill ' + (h.gate_passed ? 'ok' : ''); $('gate').title = h.gate_message;
+    $('updated').textContent = 'last cycle ' + (h.last_cycle_at || '–') + ' · errors in a row ' + h.consecutive_errors;
+    const q = s.quote_currency, rep = s.report;
+    const pnl = st.equity - st.initial_capital, pct = st.initial_capital ? pnl/st.initial_capital*100 : 0;
+    const k = [
+      {l:`Equity (${q})`, v: fmt(st.equity)}, {l:`Cash (${q})`, v: fmt(st.cash)}, {l:`Invested (${q})`, v: fmt(st.exposure)},
+      {l:`P&L (${q})`, v: fmt(pnl), cls: pnl>=0?'up':'down'}, {l:'P&L %', v: fmt(pct)+' %', cls: pnl>=0?'up':'down'},
+      {l:`Realised (${q})`, v: fmt(st.realised_pnl)}, {l:`Fees paid (${q})`, v: fmt(st.fees_paid)},
+      {l:'Day start equity', v: fmt(st.day_start_equity)}, {l:'New positions today', v: st.new_positions_today},
+      {l:'Halts', v: (st.halted_total?'TOTAL ':'') + (st.halted_daily?'DAILY':'') || 'none', cls: (st.halted_total||st.halted_daily)?'down':'up'},
+    ];
+    if (rep) k.splice(3, 0, {l:`Equity (${s.report_currency})`, v: fmt(rep.equity)}, {l:`P&L (${s.report_currency})`, v: fmt(rep.pnl), cls: rep.pnl>=0?'up':'down'});
+    $('kpis').innerHTML = k.map(x=>`<div class="kpi"><div class="v ${x.cls||''}">${x.v}</div><div class="l">${x.l}</div></div>`).join('');
+    $('fxnote').textContent = rep ? `${s.report_currency} figures use rate 1 ${s.report_currency} = ${fmt(rep.fx_rate,4)} ${q} (${rep.fx_rate_ts}). ${rep.note}` : '';
+    const pos = Object.values(st.positions || {}).map(p => ({...p, price: (st.last_prices||{})[p.product], upnl: p.qty*(((st.last_prices||{})[p.product]||p.entry_price) - p.entry_price) - p.entry_fee}));
+    table('positions', pos, [{h:'Product', f:r=>r.product}, {h:'Qty', f:r=>fmt(r.qty,6), num:1}, {h:'Entry', f:r=>fmt(r.entry_price), num:1}, {h:'Last', f:r=>fmt(r.price), num:1},
+      {h:'Unreal. P&L', f:r=>fmt(r.upnl), num:1, cls:r=>r.upnl>=0?'up':'down'}, {h:'Stop', f:r=>fmt(r.stop_price), num:1}, {h:'Target', f:r=>fmt(r.take_profit_price), num:1}, {h:'Strategy', f:r=>r.strategy}]);
+    table('limits', Object.entries(s.limits).map(([k,v])=>({k,v})), [{h:'Limit', f:r=>r.k.replace(/_/g,' ')}, {h:s.report_currency, f:r=>fmt(r.v), num:1}]);
+    const eq = await api('/api/equity?limit=2000'); drawChart(eq, st.initial_capital);
+    const orders = await api('/api/orders?limit=100');
+    table('orders', orders, [{h:'Time', f:r=>r.updated_at.slice(0,16).replace('T',' ')}, {h:'Side', f:r=>r.side, cls:r=>r.side==='BUY'?'up':'down'}, {h:'Product', f:r=>r.product},
+      {h:'Qty', f:r=>fmt(r.filled_qty||r.qty,6), num:1}, {h:'Price', f:r=>fmt(r.avg_fill_price||r.price), num:1}, {h:'Fee', f:r=>fmt(r.fee,4), num:1},
+      {h:'P&L', f:r=>r.pnl==null?'–':fmt(r.pnl), num:1, cls:r=>r.pnl>=0?'up':'down'}, {h:'Status', f:r=>r.status}, {h:'Strategy', f:r=>r.strategy}, {h:'Reason', f:r=>r.reason}]);
+    const ev = await api('/api/events?limit=150');
+    table('events', ev, [{h:'Time', f:r=>r.ts.slice(0,19).replace('T',' ')}, {h:'Kind', f:r=>r.kind, cls:r=>({halt:'down',error:'down',fill:'up'})[r.kind]||''}, {h:'Detail', f:r=>r.detail.length>160?r.detail.slice(0,160)+'…':r.detail}]);
+  } catch (e) { $('updated').textContent = 'error: ' + e.message; }
+}
+async function control(action) {
+  if (action !== 'resume' && !confirm(`Really ${action.toUpperCase()}?`)) return;
+  try { const r = await api('/api/control/' + action, {method:'POST'}); $('ctlmsg').textContent = JSON.stringify(r); refresh(); } catch (e) { $('ctlmsg').textContent = 'failed: ' + e.message; }
+}
+$('token').value = localStorage.getItem('token') || '';
+refresh(); setInterval(refresh, 30000);
+</script>
+</body>
+</html>
