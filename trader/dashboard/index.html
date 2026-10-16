@@ -330,6 +330,8 @@ $('token').addEventListener('input', () => { clearTimeout(tokenTimer); tokenTime
 $('token').addEventListener('keydown', e => { if (e.key === 'Enter') { $('token').value = cleanToken($('token').value); refresh(); } });
 window.addEventListener('resize', drawChart);
 try { const th = localStorage.getItem('theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+// A one-time link https://host/?token=... stores the token on this device and cleans the address bar.
+try { const u = new URL(location.href); const qt = cleanToken(u.searchParams.get('token')); if (qt) { localStorage.setItem('token', qt); u.searchParams.delete('token'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } } catch (e) {}
 $('token').value = localStorage.getItem('token') || '';
 setLang(LANG);
 setInterval(refresh, 30000);
