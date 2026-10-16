@@ -160,29 +160,25 @@ by `DASHBOARD_TOKEN`. Disabling the API key in Coinbase stops everything.
 
 ## Deployment (EU VPS, Docker)
 
-Fresh Ubuntu server, as root, one command:
+Pushes to `main` deploy automatically through GitHub Actions: tests, then rsync
+over SSH, then `deploy/server-setup.sh` on the server (Docker install if
+missing, `.env` with a random dashboard token on first run, `docker compose up`).
+One-time setup of the SSH key, the repository secrets and the CloudPanel reverse
+proxy for the dashboard is in [deploy/README.md](deploy/README.md).
+
+By hand on any Ubuntu server:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/hemantcts/coinbase/main/deploy/bootstrap-vps.sh)
-```
-
-`deploy/bootstrap-vps.sh` installs security updates, a firewall that allows
-SSH only, fail2ban and Docker, clones this repository into `/opt/coinbase-trader`,
-writes `.env` with a random dashboard token, and starts the paper trader and
-the dashboard. Re-running it updates the code. By hand it is:
-
-```bash
-cp .env.example .env && mkdir -p data && chmod 700 data
-sudo chown 10001:10001 data              # the container runs as uid 10001
-docker compose up -d --build
-docker compose logs -f trader
+sudo mkdir -p /opt/coinbase-trader && sudo rsync -a --exclude .git ./ /opt/coinbase-trader/
+sudo bash /opt/coinbase-trader/deploy/server-setup.sh
 ssh -L 8080:127.0.0.1:8080 user@server      # then open http://127.0.0.1:8080
 ```
 
-The containers run read-only, unprivileged, with all capabilities dropped.
-The dashboard port is bound to localhost on the host; reach it through an SSH
-tunnel. Harden the host: SSH keys only, firewall with no inbound app ports,
-automatic security updates, encrypted backups of `data/`.
+The containers run read-only, unprivileged, with all capabilities dropped. The
+dashboard port is bound to localhost on the host; reach it through an SSH
+tunnel or a CloudPanel reverse proxy with HTTPS and basic auth. Harden the
+host: SSH keys only, firewall with no inbound app ports, automatic security
+updates, encrypted backups of `data/`.
 
 ## Layout
 
