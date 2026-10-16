@@ -83,7 +83,8 @@
 <script>
 const $ = id => document.getElementById(id);
 const fmt = (x, d=2) => (x===null||x===undefined||isNaN(x)) ? '–' : Number(x).toLocaleString('de-CH',{minimumFractionDigits:d, maximumFractionDigits:d});
-const tokenHdr = () => { const t = $('token').value || localStorage.getItem('token') || ''; if ($('token').value) localStorage.setItem('token', $('token').value); return t ? {'X-Token': t} : {}; };
+const cleanToken = v => (v || '').trim().replace(/^DASHBOARD_TOKEN\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
+const tokenHdr = () => { const t = cleanToken($('token').value) || localStorage.getItem('token') || ''; if (t) localStorage.setItem('token', t); return t ? {'X-Token': t} : {}; };
 async function api(path, opts={}) { const r = await fetch(path, {...opts, headers: {...(opts.headers||{}), ...tokenHdr()}}); if (!r.ok) throw new Error(r.status + ' ' + (await r.text())); return r.json(); }
 function table(id, rows, cols) {
   const el = $(id); if (!rows.length) { el.innerHTML = '<tr><td class="muted">none</td></tr>'; return; }
@@ -138,6 +139,9 @@ async function control(action) {
   try { const r = await api('/api/control/' + action, {method:'POST'}); $('ctlmsg').textContent = JSON.stringify(r); refresh(); } catch (e) { $('ctlmsg').textContent = 'failed: ' + e.message; }
 }
 $('token').value = localStorage.getItem('token') || '';
+let tokenTimer = null;
+$('token').addEventListener('input', () => { clearTimeout(tokenTimer); tokenTimer = setTimeout(() => { $('token').value = cleanToken($('token').value); refresh(); }, 400); });
+$('token').addEventListener('keydown', e => { if (e.key === 'Enter') { $('token').value = cleanToken($('token').value); refresh(); } });
 refresh(); setInterval(refresh, 30000);
 </script>
 </body>
