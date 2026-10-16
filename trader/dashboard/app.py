@@ -83,6 +83,7 @@ def create_app(settings: Settings) -> FastAPI:
                 "last_cycle_at": last_cycle, "stale": stale,
                 "consecutive_errors": int(store.get_meta("consecutive_errors", "0") or 0),
                 "manual_stop": settings.stop_file.exists(), "flatten_pending": settings.flatten_file.exists(),
+                "severe_event": store.get_meta("severe_event", "") or "",
                 "live_trading_env": settings.live_trading, "live_armed": settings.live_armed_file.exists(),
                 "gate_passed": gate_ok, "gate_message": gate_msg,
             },

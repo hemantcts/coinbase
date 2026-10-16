@@ -15,6 +15,6 @@ else
   printf '%s=%s\n' "$KEY" "$VALUE" >> .env
 fi
 echo "now: $(grep "^${KEY}=" .env)"
-docker compose restart trader dashboard
+docker compose up -d --force-recreate trader dashboard   # restart alone keeps the old environment
 sleep 8
 docker compose logs --tail 6 --no-color trader

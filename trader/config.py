@@ -31,6 +31,9 @@ class RiskProfile:
     atr_multiple: float
     # A signal is tradeable only if expected move >= round-trip cost * this
     min_edge_multiple: float
+    # Peak-to-trough tripwire: equity this far below its highest point trips the same pause
+    # as the total-loss limit. 0 = off. (From the client's risk_v2 module.)
+    max_peak_drawdown: float = 0.0
     # Minimum order notional in quote currency
     min_order_notional: float = 10.0
 
@@ -43,6 +46,7 @@ class RiskProfile:
             "risk_per_trade": capital * self.risk_per_trade_fraction,
             "daily_loss_limit": capital * self.daily_loss_fraction,
             "total_loss_limit": capital * self.total_loss_fraction,
+            **({"max_peak_drawdown_pct": 100 * self.max_peak_drawdown} if self.max_peak_drawdown else {}),
         }
 
 
@@ -109,6 +113,7 @@ PROFILES["client"] = RiskProfile(
     take_profit_pct=0.04,
     atr_multiple=6.0,
     min_edge_multiple=1.5,
+    max_peak_drawdown=0.08,
 )
 
 # Phase C pilot: real money, but capped at CHF 100 per position and CHF 200 total

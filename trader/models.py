@@ -144,6 +144,7 @@ class PortfolioState:
     halted_daily: bool = False
     halted_total: bool = False
     halted_total_at: str = ""                    # ISO day the total halt tripped
+    peak_equity: float = 0.0                     # highest equity seen, for the peak-drawdown tripwire
     new_positions_today: int = 0
     realised_pnl: float = 0.0
     fees_paid: float = 0.0
@@ -167,6 +168,7 @@ class PortfolioState:
             "halted_daily": self.halted_daily,
             "halted_total": self.halted_total,
             "halted_total_at": self.halted_total_at,
+            "peak_equity": self.peak_equity,
             "new_positions_today": self.new_positions_today,
             "realised_pnl": self.realised_pnl,
             "fees_paid": self.fees_paid,
@@ -189,12 +191,29 @@ class PortfolioState:
             halted_daily=bool(d.get("halted_daily", False)),
             halted_total=bool(d.get("halted_total", False)),
             halted_total_at=d.get("halted_total_at", ""),
+            peak_equity=float(d.get("peak_equity", 0.0)),
             new_positions_today=int(d.get("new_positions_today", 0)),
             realised_pnl=float(d.get("realised_pnl", 0.0)),
             fees_paid=float(d.get("fees_paid", 0.0)),
             fx_rate=d.get("fx_rate"),
             fx_rate_ts=d.get("fx_rate_ts", ""),
         )
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """A verified external event (hack, sanction, regulatory shock). From the client's risk_v2 module.
+
+    Lives in data/evidence.json as a list of objects with these fields. A human or a future
+    ingestion pipeline writes it; the risk controller only reads it.
+    """
+
+    source: str
+    published_at: str        # ISO 8601 with timezone
+    verified: bool
+    severity: float          # 0 benign .. 1 critical
+    category: str            # geopolitics, regulation, security, tokenomics, macro
+    note: str = ""
 
 
 def utcnow() -> datetime:

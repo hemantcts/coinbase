@@ -10,7 +10,7 @@ from .config import Settings
 from .data import DataSource
 from .execution.base import Broker
 from .fx import FxService
-from .models import Candle, Decision, Order, OrderIntent, OrderStatus, PortfolioState, Side, Signal, iso, utcnow
+from .models import Candle, Decision, Evidence, Order, OrderIntent, OrderStatus, PortfolioState, Side, Signal, iso, utcnow
 from .notify import Notifier
 from .portfolio import apply_fill
 from .risk import RiskController
@@ -59,8 +59,13 @@ class Engine:
         existing = self.store.load_state()
         if existing is not None:
             self.state = existing
+            # Configuration may have changed between runs; keep what the dashboard shows in sync.
+            self.store.set_meta("risk_profile", self.risk.profile.name)
+            self.store.set_meta("strategy", self.strategy.name)
+            self.store.set_meta("mode", self.mode)
             self._log(now, "restart", {"cash": existing.cash, "equity": existing.equity(),
-                                       "positions": list(existing.positions), "day": existing.day})
+                                       "positions": list(existing.positions), "day": existing.day,
+                                       "profile": self.risk.profile.name, "strategy": self.strategy.name})
             return existing
         if self.fx is not None:
             fx = self.fx.rate(now)
@@ -132,6 +137,14 @@ class Engine:
 
         if self.mode == "live":
             self._reconcile_open_orders(now)
+
+        if self.mode != "backtest":
+            before = self.risk.severe_event
+            reason = self.risk.apply_evidence(self._load_evidence(now), now)
+            if reason and reason != before:
+                self._log(now, "severe_event", reason)
+                self.notifier.send("Severe event: no new buys", reason, "warning")
+            self.store.set_meta("severe_event", reason)
 
         candles: dict[str, list[Candle]] = {}
         for product in s.products:
@@ -319,6 +332,19 @@ class Engine:
                     if candle_ts is not None:
                         self.store.unmark_processed(fresh.product, candle_ts)
                     self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
+
+    def _load_evidence(self, now: datetime) -> list[Evidence]:
+        """data/evidence.json: a list of Evidence objects maintained by a human or a future pipeline."""
+        path = self.settings.data_dir / "evidence.json"
+        if not path.exists():
+            return []
+        try:
+            import json
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            return [Evidence(**{k: v for k, v in item.items() if k in Evidence.__dataclass_fields__}) for item in raw]
+        except (OSError, ValueError, TypeError) as exc:
+            self._log(now, "error", {"evidence.json": repr(exc)})
+            return []
 
     # ---- helpers -----------------------------------------------------------------------
 

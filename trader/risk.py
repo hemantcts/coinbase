@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .config import Costs, RiskProfile
-from .models import Candle, Decision, OrderIntent, PortfolioState, Position, Side, Signal
+from .models import Candle, Decision, Evidence, OrderIntent, PortfolioState, Position, Side, Signal
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,9 @@ class RiskController:
         self.specs = specs or {}
         self.manual_stop = False       # set by the engine when the STOP file exists
         self.stale_data = False        # set by the engine when market data is too old; blocks new buys
+        self.severe_event = ""         # set by apply_evidence(); non-empty blocks new buys
+        self.severe_event_threshold = 0.7
+        self.max_evidence_age_hours = 24
         # Research only: days after which a total-loss halt clears itself. 0 = never (live behaviour:
         # the owner reviews the cause and restarts by hand).
         self.halt_reset_days = 0
@@ -63,8 +66,9 @@ class RiskController:
             if (now.astimezone(timezone.utc).date() - tripped).days >= self.halt_reset_days:
                 state.halted_total = False
                 state.halted_total_at = ""
-                # Re-base the loss limit on the current equity, as an owner restarting the bot would.
+                # Re-base the loss limits on the current equity, as an owner restarting the bot would.
                 state.initial_capital = state.equity()
+                state.peak_equity = state.equity()
         return True
 
     def update_halts(self, state: PortfolioState) -> list[str]:
@@ -77,6 +81,14 @@ class RiskController:
             state.halted_total = True
             state.halted_total_at = state.day or ""
             events.append(f"TOTAL LOSS LIMIT: equity {equity:.2f} <= {total_floor:.2f}")
+        if equity > state.peak_equity:
+            state.peak_equity = equity
+        if p.max_peak_drawdown > 0 and not state.halted_total and state.peak_equity > 0:
+            peak_floor = state.peak_equity * (1 - p.max_peak_drawdown)
+            if equity <= peak_floor:
+                state.halted_total = True
+                state.halted_total_at = state.day or ""
+                events.append(f"PEAK DRAWDOWN LIMIT: equity {equity:.2f} <= {peak_floor:.2f} ({p.max_peak_drawdown:.0%} below peak {state.peak_equity:.2f})")
         if state.day_start_equity > 0:
             daily_floor = state.day_start_equity * (1 - p.daily_loss_fraction)
             if not state.halted_daily and equity <= daily_floor:
@@ -114,6 +126,8 @@ class RiskController:
             return Decision(False, "manual STOP active")
         if self.stale_data:
             return Decision(False, "market data stale, no new buys")
+        if self.severe_event:
+            return Decision(False, f"severe verified event, no new buys: {self.severe_event}")
         if state.halted_total:
             return Decision(False, "total loss limit reached, trading halted")
         if state.halted_daily:
@@ -162,6 +176,25 @@ class RiskController:
     @staticmethod
     def _atr_mode(intent: OrderIntent) -> bool:
         return getattr(intent, "stop_mode", "pct") == "atr"
+
+    # ---- external evidence ---------------------------------------------------
+
+    def apply_evidence(self, evidence: list[Evidence], now: datetime) -> str:
+        """Block new buys while a verified, severe, recent event exists. Returns the blocking reason or ''."""
+        reason = ""
+        for e in evidence:
+            try:
+                published = datetime.fromisoformat(e.published_at)
+            except ValueError:
+                continue
+            if published.tzinfo is None or published > now:
+                continue                                      # unverifiable timestamp: ignored, not trusted
+            age_h = (now - published).total_seconds() / 3600
+            if e.verified and e.severity >= self.severe_event_threshold and age_h <= self.max_evidence_age_hours:
+                reason = f"{e.category} ({e.source}, severity {e.severity:.1f}, {age_h:.0f} h ago)"
+                break
+        self.severe_event = reason
+        return reason
 
     # ---- protective exits ----------------------------------------------------
 
