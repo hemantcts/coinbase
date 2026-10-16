@@ -78,6 +78,13 @@ CloudPanel, so point its nginx at the dashboard instead of at files:
 
 Alternatively delete the site and recreate it as type **Reverse Proxy** with URL `http://127.0.0.1:8090`.
 
+## Day to day, without logging in
+
+GitHub → Actions → **Server command** → Run workflow, pick an action (`status`, `gate`, `logs`,
+`events`, `containers`, `restart`, `stop`, `resume`, `flatten`, `backtest`). The output appears in
+the job log. The same workflow can be triggered through the GitHub API, which is how Claude
+operates the server from the chat.
+
 ## Day to day, on the server
 
 ```
