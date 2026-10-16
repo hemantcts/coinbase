@@ -9,3 +9,9 @@ data/*
 *.sqlite3-wal
 *.sqlite3-shm
 backtest*.json
+
+# never commit deploy keys
+coinbase-deploy
+coinbase-deploy.pub
+*.pem
+id_ed25519*
