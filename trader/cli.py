@@ -183,7 +183,8 @@ def cmd_gate(settings: Settings, args: argparse.Namespace) -> int:
     store = Store(settings.database)
     start, end = _period(args)
     result = run_gate(settings, store, store, start, end, min_paper_hours=args.min_paper_hours)
-    print(f"Release gate for {settings.strategy}/{settings.profile.name} on {settings.products}")
+    print(f"Release gate for {settings.strategy}/{settings.profile.name} on {settings.products}; "
+          f"Phase A uses the live pilot caps ({result['tested_profile']}: 10 % per position, 20 % invested)")
     print("In-sample:     ", result["in_sample"])
     print("Out-of-sample: ", result["out_of_sample"])
     print(format_checks(result["checks"]))

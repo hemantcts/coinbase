@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .backtest import BacktestResult, walk_forward
-from .config import RiskProfile, Settings
+from .config import RiskProfile, Settings, pilot_profile
 from .models import iso, utcnow
 from .store import Store
 
@@ -104,8 +104,9 @@ def paper_checks(store: Store, settings: Settings, min_hours: float = 72.0, now:
 
 def run_gate(settings: Settings, candle_store: Store, paper_store: Store, start: datetime, end: datetime,
              min_paper_hours: float = 72.0, write: bool = True) -> dict[str, Any]:
-    profile = settings.profile
-    ins, oos = walk_forward(candle_store, settings.products, settings.strategy, profile.name, start, end,
+    """Phase A tests the profile that will actually trade real money: the pilot-capped one."""
+    profile = pilot_profile(settings.profile)
+    ins, oos = walk_forward(candle_store, settings.products, settings.strategy, profile, start, end,
                             capital=settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity,
                             halt_reset_days=settings.halt_reset_days)
     checks = backtest_checks(oos, profile) + paper_checks(paper_store, settings, min_paper_hours)
@@ -114,7 +115,8 @@ def run_gate(settings: Settings, candle_store: Store, paper_store: Store, start:
         "ts": iso(utcnow()),
         "passed": passed,
         "strategy": settings.strategy,
-        "profile": profile.name,
+        "profile": settings.profile.name,
+        "tested_profile": profile.name,
         "products": settings.products,
         "in_sample": ins.summary_row(),
         "out_of_sample": oos.summary_row(),
