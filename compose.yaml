@@ -21,9 +21,10 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/data
-    # Bound to localhost on the host: reach it through an SSH tunnel, never expose it publicly.
+    # Bound to localhost on the host: reach it through an SSH tunnel or a reverse proxy, never directly.
+    # Host port is DASHBOARD_BIND_PORT (default 8090; 8080 is often taken by control panels).
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${DASHBOARD_BIND_PORT:-8090}:8080"
     read_only: true
     tmpfs:
       - /tmp

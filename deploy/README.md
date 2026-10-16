@@ -51,7 +51,7 @@ containers running and the first trader log lines. From then on every push to `m
 
 ## The dashboard on https://coinbase.loewenmut.ch
 
-The dashboard listens only on `127.0.0.1:8080` on the server. The site already exists in
+The dashboard listens only on `127.0.0.1:8090` on the server (host port `DASHBOARD_BIND_PORT`, default 8090). The site already exists in
 CloudPanel, so point its nginx at the dashboard instead of at files:
 
 1. CloudPanel → Sites → `coinbase.loewenmut.ch` → **Vhost**. Replace the `location / { ... }`
@@ -59,7 +59,7 @@ CloudPanel, so point its nginx at the dashboard instead of at files:
 
    ```nginx
    location / {
-       proxy_pass http://127.0.0.1:8080;
+       proxy_pass http://127.0.0.1:8090;
        proxy_http_version 1.1;
        proxy_set_header Host $host;
        proxy_set_header X-Real-IP $remote_addr;
@@ -76,7 +76,7 @@ CloudPanel, so point its nginx at the dashboard instead of at files:
    `DASHBOARD_TOKEN`, found with
    `sudo grep DASHBOARD_TOKEN /home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`.
 
-Alternatively delete the site and recreate it as type **Reverse Proxy** with URL `http://127.0.0.1:8080`.
+Alternatively delete the site and recreate it as type **Reverse Proxy** with URL `http://127.0.0.1:8090`.
 
 ## Day to day, on the server
 
