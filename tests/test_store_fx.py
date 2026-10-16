@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import httpx
 
 import pytest
 
@@ -58,3 +59,39 @@ def test_fx_uses_store_cache_then_fallback(store):
 def test_fx_identity_when_currencies_match():
     fx = FxService(None, None, base="EUR", quote="EUR", offline=True)
     assert fx.rate().rate == 1.0
+
+
+def test_fx_falls_back_to_ecb_feed_when_frankfurter_fails(monkeypatch):
+    now = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    fx = FxService(None, None, base="CHF", quote="EUR")
+
+    def boom(day, now):
+        raise httpx.ConnectError("dns")
+
+    xml = """<gesmes:Envelope><Cube><Cube time='2026-10-15'>
+      <Cube currency='USD' rate='1.0850'/><Cube currency='CHF' rate='0.9400'/></Cube></Cube></gesmes:Envelope>"""
+
+    class R:
+        status_code = 200
+        text = xml
+        def raise_for_status(self): pass
+
+    class C:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def get(self, url, **k): return R()
+
+    monkeypatch.setattr(fx, "_fetch_frankfurter", boom)
+    monkeypatch.setattr(httpx, "Client", C)
+    r = fx.rate(now)
+    assert r.source == "ecb:2026-10-15" and r.rate == pytest.approx(1 / 0.94)
+    assert fx.to_report(100.0, now) == pytest.approx(94.0)
+
+
+def test_fx_error_message_names_the_sources(monkeypatch):
+    fx = FxService(None, None, base="CHF", quote="EUR")
+    monkeypatch.setattr(fx, "_fetch_frankfurter", lambda d, n: (_ for _ in ()).throw(httpx.ConnectError("nope")))
+    monkeypatch.setattr(fx, "_fetch_ecb", lambda d, n: (_ for _ in ()).throw(httpx.ConnectError("nope2")))
+    with pytest.raises(RuntimeError, match="frankfurter.*ecb"):
+        fx.rate(datetime(2026, 10, 16, tzinfo=timezone.utc))
