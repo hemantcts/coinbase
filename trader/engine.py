@@ -206,6 +206,12 @@ class Engine:
 
         ts = iso(now)
         self.store.save_state(state, ts, self._report_equity(now))
+        if self.last_signals:
+            import json
+            self.store.set_meta("last_signals", json.dumps({
+                k: {"side": v.side.value, "strategy": v.strategy, "reason": v.reason, "expected_move": v.expected_move,
+                    "price": state.last_prices.get(k), "ts": ts}
+                for k, v in self.last_signals.items()}))
         return {
             "ts": ts, "cash": state.cash, "equity": state.equity(), "exposure": state.exposure(),
             "positions": {k: round(v.qty, 8) for k, v in state.positions.items()},

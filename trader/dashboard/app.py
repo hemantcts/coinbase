@@ -65,6 +65,9 @@ def create_app(settings: Settings) -> FastAPI:
                 "gate_passed": gate_ok, "gate_message": gate_msg,
             },
             "limits": settings.profile.amounts(settings.starting_capital_report),
+            "granularity": settings.granularity,
+            "poll_seconds": settings.poll_seconds,
+            "last_signals": json.loads(store.get_meta("last_signals") or "{}"),
             "state": st.to_dict() if st else None,
         }
         if st and st.fx_rate:

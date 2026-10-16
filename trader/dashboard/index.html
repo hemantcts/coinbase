@@ -1,148 +1,338 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coinbase AI Trader</title>
 <style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --text:#e6e8ee; --muted:#8b93a7; --up:#3ecf8e; --down:#ff6b6b; --warn:#ffb020; --accent:#5b8cff; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0; font-weight:600; }
-  .pill { padding:3px 10px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted); }
-  .pill.ok { color:var(--up); border-color:var(--up); } .pill.bad { color:var(--down); border-color:var(--down); } .pill.warn { color:var(--warn); border-color:var(--warn); }
-  main { padding:16px 20px; display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; min-width:0; }
-  section.wide { grid-column:1 / -1; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:600; }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
-  .kpi .v { font-size:22px; font-weight:600; } .kpi .l { color:var(--muted); font-size:12px; }
-  .up { color:var(--up); } .down { color:var(--down); }
-  table { width:100%; border-collapse:collapse; font-size:13px; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:500; } .num { text-align:right; font-variant-numeric:tabular-nums; }
-  .scroll { overflow:auto; max-height:340px; }
-  canvas { width:100%; height:220px; display:block; }
-  .controls { display:flex; gap:8px; flex-wrap:wrap; }
-  button { background:#20242e; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; }
-  button.danger { border-color:var(--down); color:var(--down); } button.ok { border-color:var(--up); color:var(--up); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
-  .muted { color:var(--muted); font-size:12px; }
-  input { background:#0f1115; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; }
-  @media (max-width:640px){ main{padding:12px;} header{padding:12px;} }
+  :root {
+    --bg: #f4f6fa; --panel: #ffffff; --panel-2: #f8fafc; --line: #e3e8ef; --text: #0f172a; --muted: #64748b;
+    --up: #0f9f6e; --down: #d93f3f; --warn: #c77d00; --accent: #2f6fed; --accent-soft: #e8f0ff;
+    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px -16px rgba(15,23,42,.25);
+    --radius: 14px;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e14; --panel: #121722; --panel-2: #171d2a; --line: #232b3a; --text: #e8ecf3; --muted: #8a94a8;
+    --up: #3ddc97; --down: #ff6b6b; --warn: #ffb547; --accent: #6b9cff; --accent-soft: #1a2540;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 32px -20px rgba(0,0,0,.8);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #0b0e14; --panel: #121722; --panel-2: #171d2a; --line: #232b3a; --text: #e8ecf3; --muted: #8a94a8;
+    --up: #3ddc97; --down: #ff6b6b; --warn: #ffb547; --accent: #6b9cff; --accent-soft: #1a2540;
+    --shadow: 0 1px 0 rgba(255,255,255,.03), 0 12px 32px -20px rgba(0,0,0,.8);
+  } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); }
+  header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1400px; margin: 0 auto; padding: 12px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; margin-right: 6px; }
+  .brand .logo { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), #8b5cf6); display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 800; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); background: color-mix(in srgb, var(--up) 10%, transparent); }
+  .pill.bad { color: var(--down); border-color: color-mix(in srgb, var(--down) 40%, transparent); background: color-mix(in srgb, var(--down) 10%, transparent); }
+  .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  .pill.info { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-soft); }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .iconbtn { border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); border-radius: 10px; width: 34px; height: 32px; cursor: pointer; font-size: 15px; }
+  .meta { font-size: 12.5px; color: var(--muted); }
+  main { max-width: 1400px; margin: 0 auto; padding: 18px 20px 40px; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; min-width: 0; grid-column: span 12; }
+  .card h2 { margin: 0 0 12px; font-size: 12.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .card h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .span4 { grid-column: span 4; } .span6 { grid-column: span 6; } .span8 { grid-column: span 8; }
+  @media (max-width: 1000px) { .span4, .span6, .span8 { grid-column: span 12; } }
+  .hero { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .hero { grid-template-columns: 1fr; } }
+  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .l { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+  .stat .v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .stat .v.big { font-size: 34px; }
+  .stat .s { font-size: 12.5px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); } .down { color: var(--down); } .warnc { color: var(--warn); }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .mini { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+  .mini .l { font-size: 12px; color: var(--muted); } .mini .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .explain { display: flex; flex-direction: column; gap: 8px; }
+  .sig { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+  .sig b { min-width: 76px; font-variant-numeric: tabular-nums; }
+  .sig .r { color: var(--muted); font-size: 13.5px; }
+  .chartwrap { position: relative; height: 260px; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; box-shadow: var(--shadow); display: none; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+  tr:last-child td { border-bottom: 0; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow: auto; max-height: 360px; }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 6px 0; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--line); }
+  .tag.buy { color: var(--up); } .tag.sell { color: var(--down); }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 10px; padding: 10px 12px; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+  .btn small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .btn.danger { border-color: color-mix(in srgb, var(--down) 45%, transparent); color: var(--down); }
+  .btn.ok { border-color: color-mix(in srgb, var(--up) 45%, transparent); color: var(--up); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .tokenrow { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  input[type=password], input[type=text] { flex: 1; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: inherit; min-width: 0; }
+  .note { color: var(--muted); font-size: 12.5px; margin-top: 10px; line-height: 1.45; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); display: none; z-index: 10; }
+  .banner { grid-column: span 12; border-radius: 12px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--text); display: none; }
+  .card h2 { flex-wrap: wrap; }
+  @media (max-width: 760px) { header { position: static; } .right { margin-left: 0; width: 100%; justify-content: space-between; } }
+  @media (max-width: 640px) { main { padding: 12px; gap: 12px; } .bar { padding: 10px 12px; } .card { padding: 14px; } .stat .v.big { font-size: 28px; } .controls { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>Coinbase AI Trader</h1>
-  <span class="pill" id="mode">mode</span>
-  <span class="pill" id="health">health</span>
-  <span class="pill" id="stop">stop</span>
-  <span class="pill" id="gate">gate</span>
-  <span class="muted" id="updated" style="margin-left:auto"></span>
+  <div class="bar">
+    <div class="brand"><div class="logo">C</div><span>Coinbase AI Trader</span></div>
+    <div class="pills">
+      <span class="pill" id="p-mode"><span class="dot"></span><span>…</span></span>
+      <span class="pill" id="p-engine"><span class="dot"></span><span>…</span></span>
+      <span class="pill" id="p-trading"><span class="dot"></span><span>…</span></span>
+      <span class="pill" id="p-gate"><span class="dot"></span><span>…</span></span>
+    </div>
+    <div class="right">
+      <span class="meta" id="meta"></span>
+      <div class="seg" id="lang"><button data-lang="de">DE</button><button data-lang="en">EN</button></div>
+      <button class="iconbtn" id="theme" title="Theme">◐</button>
+    </div>
+  </div>
 </header>
+
 <main>
-  <section class="wide">
-    <h2>Portfolio</h2>
-    <div class="kpis" id="kpis"></div>
-    <div class="muted" id="fxnote" style="margin-top:8px"></div>
+  <div class="banner" id="banner"></div>
+
+  <section class="card">
+    <h2><span data-i="portfolio">Portfolio</span><span class="sub" id="fxnote"></span></h2>
+    <div class="hero">
+      <div class="stat"><div class="l" id="l-eq-rep">Equity (CHF)</div><div class="v big" id="v-eq-rep">–</div><div class="s" id="s-eq-rep"></div></div>
+      <div class="stat"><div class="l" id="l-pnl">P&amp;L</div><div class="v" id="v-pnl">–</div><div class="s" id="s-pnl"></div></div>
+      <div class="stat"><div class="l" id="l-cash">Cash</div><div class="v" id="v-cash">–</div><div class="s" id="s-cash"></div></div>
+      <div class="stat"><div class="l" id="l-inv">Invested</div><div class="v" id="v-inv">–</div><div class="s" id="s-inv"></div></div>
+    </div>
+    <div class="grid3" style="margin-top:12px" id="minis"></div>
   </section>
-  <section class="wide">
-    <h2>Equity</h2>
-    <canvas id="chart" width="1200" height="220"></canvas>
+
+  <section class="card span8">
+    <h2><span data-i="equity">Equity</span><span class="sub" id="eqrange"></span></h2>
+    <div class="chartwrap"><canvas id="chart"></canvas><div class="tip" id="tip"></div></div>
   </section>
-  <section>
-    <h2>Open positions</h2>
+
+  <section class="card span4">
+    <h2 data-i="whatnow">What the bot is doing</h2>
+    <div class="explain" id="explain"></div>
+    <div class="note" id="explain-note"></div>
+  </section>
+
+  <section class="card span6">
+    <h2 data-i="positions">Open positions</h2>
     <div class="scroll"><table id="positions"></table></div>
   </section>
-  <section>
-    <h2>Limits (risk profile)</h2>
+
+  <section class="card span6">
+    <h2 data-i="limits">Risk limits</h2>
     <div class="scroll"><table id="limits"></table></div>
   </section>
-  <section>
-    <h2>Emergency controls</h2>
+
+  <section class="card span4">
+    <h2 data-i="controls">Emergency controls</h2>
+    <div class="tokenrow"><input id="token" type="password" placeholder="Token" autocomplete="off"><button class="iconbtn" id="eye" title="show">👁</button></div>
     <div class="controls">
-      <input id="token" placeholder="dashboard token" type="password">
-      <button class="danger" onclick="control('stop')">STOP new buys</button>
-      <button class="danger" onclick="control('flatten')">FLATTEN (sell all)</button>
-      <button class="danger" onclick="control('disarm')">DISARM live</button>
-      <button class="ok" onclick="control('resume')">Resume</button>
+      <button class="btn danger" data-act="stop"><span data-i="b-stop">STOP new buys</span><small data-i="b-stop-s">exits keep working</small></button>
+      <button class="btn ok" data-act="resume"><span data-i="b-resume">Resume</span><small data-i="b-resume-s">clear STOP</small></button>
+      <button class="btn danger" data-act="flatten"><span data-i="b-flatten">FLATTEN</span><small data-i="b-flatten-s">sell everything, then STOP</small></button>
+      <button class="btn danger" data-act="disarm"><span data-i="b-disarm">DISARM live</span><small data-i="b-disarm-s">remove the live arming</small></button>
     </div>
-    <div class="muted" style="margin-top:8px">STOP blocks new positions; exits, stop-loss and take-profit keep working. FLATTEN sells everything at the next cycle and then engages STOP.</div>
-    <div id="ctlmsg" class="muted"></div>
+    <div class="note" data-i="controls-note"></div>
   </section>
-  <section class="wide">
-    <h2>Recent orders</h2>
+
+  <section class="card span8">
+    <h2 data-i="orders">Orders</h2>
     <div class="scroll"><table id="orders"></table></div>
   </section>
-  <section class="wide">
-    <h2>Events</h2>
+
+  <section class="card">
+    <h2 data-i="events">Events</h2>
     <div class="scroll"><table id="events"></table></div>
   </section>
 </main>
+<div class="toast" id="toast"></div>
+
 <script>
+const I18N = {
+  de: {
+    portfolio: "Portfolio", equity: "Kapitalverlauf", whatnow: "Was der Agent gerade tut", positions: "Offene Positionen",
+    limits: "Risikolimiten", controls: "Not-Aus", orders: "Aufträge", events: "Ereignisse",
+    "b-stop": "STOP neue Käufe", "b-stop-s": "Verkäufe und Stops laufen weiter", "b-resume": "Fortsetzen", "b-resume-s": "STOP aufheben",
+    "b-flatten": "ALLES VERKAUFEN", "b-flatten-s": "alle Positionen schliessen, dann STOP", "b-disarm": "ECHTGELD SPERREN", "b-disarm-s": "Freigabe für Echtgeld entfernen",
+    "controls-note": "STOP verhindert neue Positionen; Verkäufe, Stop-Loss und Gewinnmitnahmen laufen weiter. ALLES VERKAUFEN schliesst beim nächsten Zyklus alle Positionen und setzt STOP. Für die Knöpfe braucht es das Token aus der .env-Datei auf dem Server.",
+    mode: { paper: "Simulation", live: "ECHTGELD", backtest: "Backtest" },
+    engine_ok: "Agent läuft", engine_stale: "Agent reagiert nicht", trading_on: "Handel aktiv", stop: "STOP aktiv", flatten: "Verkauf angefordert",
+    gate_ok: "Freigabe bestanden", gate_no: "Freigabe noch offen", lastcycle: "letzter Zyklus", errors: "Fehler in Folge",
+    eq_rep: c => `Kapital (${c})`, eq_quote: c => `Kapital (${c})`, pnl: "Gewinn / Verlust", cash: "Barbestand", invested: "Investiert",
+    since_start: "seit Start", of_equity: "des Kapitals", positions_n: n => `${n} Position${n === 1 ? "" : "en"}`,
+    realised: "Realisiert", fees: "Gebühren bezahlt", daystart: "Tagesanfang", newtoday: "Neue Positionen heute", halts: "Sperren", none: "keine",
+    halt_total: "GESAMTVERLUST", halt_daily: "TAGESVERLUST", startcap: "Startkapital", started: "Start",
+    fxnote: (rep, q, r, t) => `1 ${rep} = ${r} ${q}, Kurs vom ${t}`,
+    noposition: "Keine offene Position. Das Kapital liegt in Bar, bis ein Aufwärtstrend bestätigt ist.",
+    waiting: "Wartet", holding: "Hält", explain_note: (g, f, s) => `Der Agent prüft alle ${g} Stunden eine neue Kerze. Er kauft nur, wenn der gleitende Durchschnitt über ${f} Kerzen über dem über ${s} Kerzen liegt und der Kurs darüber. Wenn nichts passiert, ist das gewollt: Nicht handeln kostet nichts, falsch handeln kostet Gebühren.`,
+    reasons: { "no uptrend": "kein Aufwärtstrend", "trend intact": "Trend intakt, Position wird gehalten", "warmup": "sammelt noch Kursdaten", "indicators": "zu wenig Daten", "bad data": "ungültige Kursdaten", "no confirmed uptrend": "kein bestätigter Aufwärtstrend", "no momentum": "kein Momentum", "no dip or market unhealthy": "kein Rücksetzer", "no member signals": "kein Signal" },
+    sides: { BUY: "KAUF", SELL: "VERKAUF", HOLD: "HALTEN" },
+    th: { product: "Markt", qty: "Menge", entry: "Einstieg", last: "Aktuell", upnl: "Unreal. G/V", stop: "Stop", target: "Ziel", strategy: "Strategie",
+          time: "Zeit", side: "Seite", price: "Preis", fee: "Gebühr", pnl: "G/V", status: "Status", reason: "Grund", kind: "Art", detail: "Details", limit: "Limite" },
+    limits_k: { max_position: "Max. pro Position", max_exposure: "Max. investiert", min_reserve: "Mindestreserve", risk_per_trade: "Risiko pro Trade", daily_loss_limit: "Tagesverlustgrenze", total_loss_limit: "Gesamtverlustgrenze" },
+    kinds: { start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft" },
+    status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
+    empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
+    done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
+    live_banner: "ECHTGELD-MODUS. Jede Ausführung ist ein echter Auftrag auf Coinbase.",
+    dateloc: "de-CH",
+  },
+  en: {
+    portfolio: "Portfolio", equity: "Equity", whatnow: "What the bot is doing", positions: "Open positions",
+    limits: "Risk limits", controls: "Emergency controls", orders: "Orders", events: "Events",
+    "b-stop": "STOP new buys", "b-stop-s": "exits and stops keep working", "b-resume": "Resume", "b-resume-s": "clear STOP",
+    "b-flatten": "FLATTEN", "b-flatten-s": "sell everything, then STOP", "b-disarm": "DISARM live", "b-disarm-s": "remove the live arming",
+    "controls-note": "STOP blocks new positions; exits, stop-loss and take-profit keep working. FLATTEN sells everything at the next cycle and engages STOP. The buttons need the token from the .env file on the server.",
+    mode: { paper: "Paper", live: "LIVE", backtest: "Backtest" },
+    engine_ok: "engine running", engine_stale: "engine not responding", trading_on: "trading enabled", stop: "STOP active", flatten: "flatten pending",
+    gate_ok: "gate passed", gate_no: "gate not passed", lastcycle: "last cycle", errors: "errors in a row",
+    eq_rep: c => `Equity (${c})`, eq_quote: c => `Equity (${c})`, pnl: "Profit / loss", cash: "Cash", invested: "Invested",
+    since_start: "since start", of_equity: "of equity", positions_n: n => `${n} position${n === 1 ? "" : "s"}`,
+    realised: "Realised", fees: "Fees paid", daystart: "Day start", newtoday: "New positions today", halts: "Halts", none: "none",
+    halt_total: "TOTAL LOSS", halt_daily: "DAILY LOSS", startcap: "Starting capital", started: "Started",
+    fxnote: (rep, q, r, t) => `1 ${rep} = ${r} ${q}, rate of ${t}`,
+    noposition: "No open position. The capital sits in cash until an uptrend is confirmed.",
+    waiting: "Waiting", holding: "Holding", explain_note: (g, f, s) => `The bot checks for a new candle every ${g} hours. It buys only when the ${f}-candle average is above the ${s}-candle average and the price is above both. Doing nothing is deliberate: not trading costs nothing, trading wrongly costs fees.`,
+    reasons: { "no uptrend": "no uptrend", "trend intact": "trend intact, position held", "warmup": "collecting price history", "indicators": "not enough data", "bad data": "bad price data", "no confirmed uptrend": "no confirmed uptrend", "no momentum": "no momentum", "no dip or market unhealthy": "no dip", "no member signals": "no signal" },
+    sides: { BUY: "BUY", SELL: "SELL", HOLD: "HOLD" },
+    th: { product: "Market", qty: "Qty", entry: "Entry", last: "Last", upnl: "Unreal. P&L", stop: "Stop", target: "Target", strategy: "Strategy",
+          time: "Time", side: "Side", price: "Price", fee: "Fee", pnl: "P&L", status: "Status", reason: "Reason", kind: "Kind", detail: "Detail", limit: "Limit" },
+    limits_k: { max_position: "Max per position", max_exposure: "Max invested", min_reserve: "Minimum reserve", risk_per_trade: "Risk per trade", daily_loss_limit: "Daily loss limit", total_loss_limit: "Total loss limit" },
+    kinds: { start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened" },
+    status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
+    empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
+    done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
+    live_banner: "LIVE MODE. Every fill is a real order on Coinbase.",
+    dateloc: "en-GB",
+  }
+};
 const $ = id => document.getElementById(id);
-const fmt = (x, d=2) => (x===null||x===undefined||isNaN(x)) ? '–' : Number(x).toLocaleString('de-CH',{minimumFractionDigits:d, maximumFractionDigits:d});
+let LANG = localStorage.getItem('lang') || (navigator.language || 'de').toLowerCase().startsWith('en') ? (localStorage.getItem('lang') || 'de') : 'de';
+LANG = localStorage.getItem('lang') || 'de';
+const T = () => I18N[LANG];
+const fmt = (x, d = 2) => (x === null || x === undefined || isNaN(x)) ? '–' : Number(x).toLocaleString(T().dateloc, { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = x => (x === null || x === undefined || isNaN(x)) ? '–' : (x >= 0 ? '+' : '') + fmt(x, 2) + ' %';
+const dt = s => s ? new Date(s).toLocaleString(T().dateloc, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–';
 const cleanToken = v => (v || '').trim().replace(/^DASHBOARD_TOKEN\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
-const tokenHdr = () => { const t = cleanToken($('token').value) || localStorage.getItem('token') || ''; if (t) localStorage.setItem('token', t); return t ? {'X-Token': t} : {}; };
-async function api(path, opts={}) { const r = await fetch(path, {...opts, headers: {...(opts.headers||{}), ...tokenHdr()}}); if (!r.ok) throw new Error(r.status + ' ' + (await r.text())); return r.json(); }
+const token = () => { const t = cleanToken($('token').value) || localStorage.getItem('token') || ''; if (t) localStorage.setItem('token', t); return t; };
+const hdr = () => token() ? { 'X-Token': token() } : {};
+async function api(path, opts = {}) { const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), ...hdr() } }); if (!r.ok) { const e = new Error(r.status); e.status = r.status; throw e; } return r.json(); }
+function setLang(l) { LANG = l; localStorage.setItem('lang', l); document.documentElement.lang = l; document.querySelectorAll('[data-i]').forEach(el => { const k = el.dataset.i; const v = T()[k]; if (typeof v === 'string') el.textContent = v; }); document.querySelectorAll('#lang button').forEach(b => b.classList.toggle('on', b.dataset.lang === l)); refresh(); }
+function toast(msg, ms = 2500) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', ms); }
+function pill(id, cls, text) { const el = $(id); el.className = 'pill ' + cls; el.querySelector('span:last-child').textContent = text; }
 function table(id, rows, cols) {
-  const el = $(id); if (!rows.length) { el.innerHTML = '<tr><td class="muted">none</td></tr>'; return; }
-  el.innerHTML = '<tr>' + cols.map(c=>`<th class="${c.num?'num':''}">${c.h}</th>`).join('') + '</tr>' +
-    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.num?'num':''} ${c.cls?c.cls(r):''}">${c.f(r)}</td>`).join('') + '</tr>').join('');
+  const el = $(id);
+  if (!rows.length) { el.innerHTML = `<tr><td class="empty">${T().empty}</td></tr>`; return; }
+  el.innerHTML = '<tr>' + cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.h}</th>`).join('') + '</tr>' +
+    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls ? c.cls(r) : ''}">${c.f(r)}</td>`).join('') + '</tr>').join('');
 }
-function drawChart(points, initial) {
-  const cv = $('chart'), ctx = cv.getContext('2d'); const W = cv.width, H = cv.height; ctx.clearRect(0,0,W,H);
-  if (points.length < 2) { ctx.fillStyle='#8b93a7'; ctx.fillText('waiting for data', 10, 20); return; }
-  const ys = points.map(p=>p.equity); let lo = Math.min(...ys, initial), hi = Math.max(...ys, initial); if (hi===lo){hi=lo+1;} const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
-  const x = i => 40 + (W-50) * i/(points.length-1), y = v => H-20 - (H-30)*(v-lo)/(hi-lo);
-  ctx.strokeStyle='#262b36'; ctx.beginPath(); ctx.moveTo(40, y(initial)); ctx.lineTo(W-10, y(initial)); ctx.stroke();
-  ctx.fillStyle='#8b93a7'; ctx.font='11px system-ui'; ctx.fillText(fmt(hi+pad,0), 2, 12); ctx.fillText(fmt(lo-pad,0), 2, H-20); ctx.fillText(points[0].ts.slice(0,16).replace('T',' '), 40, H-6); ctx.fillText(points[points.length-1].ts.slice(0,16).replace('T',' '), W-130, H-6);
-  ctx.strokeStyle = ys[ys.length-1] >= initial ? '#3ecf8e' : '#ff6b6b'; ctx.lineWidth=1.6; ctx.beginPath();
-  points.forEach((p,i)=> i ? ctx.lineTo(x(i), y(p.equity)) : ctx.moveTo(x(i), y(p.equity))); ctx.stroke();
+let CURVE = [], INITIAL = 0;
+function drawChart() {
+  const cv = $('chart'), wrap = cv.parentElement, dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const muted = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim();
+  if (CURVE.length < 2) { ctx.fillStyle = muted; ctx.font = '13px system-ui'; ctx.fillText(T().empty, 12, 24); return; }
+  const pts = CURVE, ys = pts.map(p => p.equity);
+  let lo = Math.min(...ys, INITIAL), hi = Math.max(...ys, INITIAL); if (hi - lo < INITIAL * 0.004) { const m = (hi + lo) / 2; lo = m - INITIAL * 0.002; hi = m + INITIAL * 0.002; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const L = 56, R = 12, Tp = 12, B = 26;
+  const x = i => L + (W - L - R) * i / (pts.length - 1), y = v => Tp + (H - Tp - B) * (1 - (v - lo) / (hi - lo));
+  ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.fillStyle = muted; ctx.font = '11px system-ui'; ctx.textAlign = 'right';
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4, yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(fmt(v, 0), L - 8, yy + 4); }
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = muted; ctx.beginPath(); ctx.moveTo(L, y(INITIAL)); ctx.lineTo(W - R, y(INITIAL)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.textAlign = 'left'; ctx.fillText(dt(pts[0].ts), L, H - 8); ctx.textAlign = 'right'; ctx.fillText(dt(pts[pts.length - 1].ts), W - R, H - 8);
+  const last = ys[ys.length - 1], col = last >= INITIAL ? css.getPropertyValue('--up').trim() : css.getPropertyValue('--down').trim();
+  const g = ctx.createLinearGradient(0, Tp, 0, H - B); g.addColorStop(0, col + '55'); g.addColorStop(1, col + '00');
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(x(i), y(p.equity)) : ctx.moveTo(x(i), y(p.equity))); ctx.lineTo(x(pts.length - 1), H - B); ctx.lineTo(x(0), H - B); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(x(i), y(p.equity)) : ctx.moveTo(x(i), y(p.equity))); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  cv.onmousemove = e => { const r = cv.getBoundingClientRect(); const i = Math.max(0, Math.min(pts.length - 1, Math.round((e.clientX - r.left - L) / (W - L - R) * (pts.length - 1)))); const p = pts[i]; const tip = $('tip'); tip.style.display = 'block'; tip.textContent = `${dt(p.ts)}  ${fmt(p.equity)}`; tip.style.left = Math.min(W - 180, Math.max(0, x(i) + 10)) + 'px'; tip.style.top = Math.max(0, y(p.equity) - 34) + 'px'; };
+  cv.onmouseleave = () => $('tip').style.display = 'none';
 }
+function reasonText(r) { const m = T().reasons; for (const k in m) if ((r || '').startsWith(k)) return m[k]; return r || ''; }
 async function refresh() {
+  const t = T();
   try {
-    const s = await api('/api/state'); const st = s.state || {}; const h = s.health;
-    $('mode').textContent = s.mode.toUpperCase() + ' · ' + s.strategy + ' · ' + s.profile; $('mode').className = 'pill ' + (s.mode==='live' ? 'warn' : '');
-    $('health').textContent = h.stale ? 'engine stale' : 'engine running'; $('health').className = 'pill ' + (h.stale ? 'bad' : 'ok');
-    $('stop').textContent = h.flatten_pending ? 'FLATTEN pending' : (h.manual_stop ? 'STOP active' : 'trading enabled'); $('stop').className = 'pill ' + (h.manual_stop||h.flatten_pending ? 'warn' : 'ok');
-    $('gate').textContent = h.gate_passed ? 'gate passed' : 'gate not passed'; $('gate').className = 'pill ' + (h.gate_passed ? 'ok' : ''); $('gate').title = h.gate_message;
-    $('updated').textContent = 'last cycle ' + (h.last_cycle_at || '–') + ' · errors in a row ' + h.consecutive_errors;
-    const q = s.quote_currency, rep = s.report;
-    const pnl = st.equity - st.initial_capital, pct = st.initial_capital ? pnl/st.initial_capital*100 : 0;
-    const k = [
-      {l:`Equity (${q})`, v: fmt(st.equity)}, {l:`Cash (${q})`, v: fmt(st.cash)}, {l:`Invested (${q})`, v: fmt(st.exposure)},
-      {l:`P&L (${q})`, v: fmt(pnl), cls: pnl>=0?'up':'down'}, {l:'P&L %', v: fmt(pct)+' %', cls: pnl>=0?'up':'down'},
-      {l:`Realised (${q})`, v: fmt(st.realised_pnl)}, {l:`Fees paid (${q})`, v: fmt(st.fees_paid)},
-      {l:'Day start equity', v: fmt(st.day_start_equity)}, {l:'New positions today', v: st.new_positions_today},
-      {l:'Halts', v: (st.halted_total?'TOTAL ':'') + (st.halted_daily?'DAILY':'') || 'none', cls: (st.halted_total||st.halted_daily)?'down':'up'},
-    ];
-    if (rep) k.splice(3, 0, {l:`Equity (${s.report_currency})`, v: fmt(rep.equity)}, {l:`P&L (${s.report_currency})`, v: fmt(rep.pnl), cls: rep.pnl>=0?'up':'down'});
-    $('kpis').innerHTML = k.map(x=>`<div class="kpi"><div class="v ${x.cls||''}">${x.v}</div><div class="l">${x.l}</div></div>`).join('');
-    $('fxnote').textContent = rep ? `${s.report_currency} figures use rate 1 ${s.report_currency} = ${fmt(rep.fx_rate,4)} ${q} (${rep.fx_rate_ts}). ${rep.note}` : '';
-    const pos = Object.values(st.positions || {}).map(p => ({...p, price: (st.last_prices||{})[p.product], upnl: p.qty*(((st.last_prices||{})[p.product]||p.entry_price) - p.entry_price) - p.entry_fee}));
-    table('positions', pos, [{h:'Product', f:r=>r.product}, {h:'Qty', f:r=>fmt(r.qty,6), num:1}, {h:'Entry', f:r=>fmt(r.entry_price), num:1}, {h:'Last', f:r=>fmt(r.price), num:1},
-      {h:'Unreal. P&L', f:r=>fmt(r.upnl), num:1, cls:r=>r.upnl>=0?'up':'down'}, {h:'Stop', f:r=>fmt(r.stop_price), num:1}, {h:'Target', f:r=>fmt(r.take_profit_price), num:1}, {h:'Strategy', f:r=>r.strategy}]);
-    table('limits', Object.entries(s.limits).map(([k,v])=>({k,v})), [{h:'Limit', f:r=>r.k.replace(/_/g,' ')}, {h:s.report_currency, f:r=>fmt(r.v), num:1}]);
-    const eq = await api('/api/equity?limit=2000'); drawChart(eq, st.initial_capital);
+    const s = await api('/api/state'); const st = s.state || {}; const h = s.health; const q = s.quote_currency, rep = s.report_currency;
+    pill('p-mode', s.mode === 'live' ? 'warn' : 'info', `${t.mode[s.mode] || s.mode} · ${s.strategy} · ${s.profile}`);
+    pill('p-engine', h.stale ? 'bad' : 'ok', h.stale ? t.engine_stale : t.engine_ok);
+    pill('p-trading', h.flatten_pending ? 'warn' : (h.manual_stop ? 'warn' : 'ok'), h.flatten_pending ? t.flatten : (h.manual_stop ? t.stop : t.trading_on));
+    pill('p-gate', h.gate_passed ? 'ok' : '', h.gate_passed ? t.gate_ok : t.gate_no); $('p-gate').title = h.gate_message || '';
+    $('meta').textContent = `${t.lastcycle} ${dt(h.last_cycle_at)} · ${t.errors} ${h.consecutive_errors}`;
+    const b = $('banner'); if (s.mode === 'live') { b.textContent = t.live_banner; b.style.display = 'block'; } else if (h.stale && h.last_cycle_at) { b.textContent = t.stale_banner; b.style.display = 'block'; } else b.style.display = 'none';
+    const r = s.report, fx = r ? r.fx_rate : null, toRep = v => (fx ? v / fx : v);
+    const pnl = (st.equity || 0) - (st.initial_capital || 0), pnlPct = st.initial_capital ? pnl / st.initial_capital * 100 : 0;
+    $('l-eq-rep').textContent = t.eq_rep(fx ? rep : q); $('v-eq-rep').textContent = fmt(fx ? toRep(st.equity) : st.equity);
+    $('s-eq-rep').textContent = fx ? `${fmt(st.equity)} ${q} · ${t.startcap} ${fmt(s.starting_capital_report, 0)} ${rep}` : `${t.startcap} ${fmt(st.initial_capital, 0)} ${q}`;
+    $('l-pnl').textContent = `${t.pnl} (${fx ? rep : q})`; $('v-pnl').textContent = fmt(fx ? toRep(pnl) : pnl); $('v-pnl').className = 'v ' + (pnl >= 0 ? 'up' : 'down');
+    $('s-pnl').textContent = `${pct(pnlPct)} ${t.since_start}`;
+    $('l-cash').textContent = `${t.cash} (${q})`; $('v-cash').textContent = fmt(st.cash); $('s-cash').textContent = st.equity ? `${fmt(st.cash / st.equity * 100, 0)} % ${t.of_equity}` : '';
+    $('l-inv').textContent = `${t.invested} (${q})`; $('v-inv').textContent = fmt(st.exposure); $('s-inv').textContent = t.positions_n(Object.keys(st.positions || {}).length);
+    const haltTxt = (st.halted_total ? t.halt_total + ' ' : '') + (st.halted_daily ? t.halt_daily : '') || t.none;
+    $('minis').innerHTML = [
+      [t.realised + ` (${q})`, fmt(st.realised_pnl), st.realised_pnl >= 0 ? 'up' : 'down'], [t.fees + ` (${q})`, fmt(st.fees_paid)], [t.daystart + ` (${q})`, fmt(st.day_start_equity)],
+      [t.newtoday, st.new_positions_today ?? '–'], [t.halts, haltTxt, (st.halted_total || st.halted_daily) ? 'down' : 'up'], [t.started, dt(s.started_at)],
+    ].map(([l, v, c]) => `<div class="mini"><div class="l">${l}</div><div class="v ${c || ''}">${v}</div></div>`).join('');
+    $('fxnote').textContent = r ? t.fxnote(rep, q, fmt(r.fx_rate, 4), dt(r.fx_rate_ts)) : '';
+    const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee }; });
+    table('positions', pos, [{ h: t.th.product, f: r => r.product }, { h: t.th.qty, f: r => fmt(r.qty, 6), num: 1 }, { h: t.th.entry, f: r => fmt(r.entry_price), num: 1 }, { h: t.th.last, f: r => fmt(r.last), num: 1 },
+      { h: t.th.upnl, f: r => fmt(r.upnl), num: 1, cls: r => r.upnl >= 0 ? 'up' : 'down' }, { h: t.th.stop, f: r => r.stop_price ? fmt(r.stop_price) : '–', num: 1 }, { h: t.th.target, f: r => r.take_profit_price ? fmt(r.take_profit_price) : '–', num: 1 }, { h: t.th.strategy, f: r => r.strategy }]);
+    table('limits', Object.entries(s.limits || {}).map(([k, v]) => ({ k, v })), [{ h: t.th.limit, f: r => t.limits_k[r.k] || r.k }, { h: rep, f: r => fmt(r.v), num: 1 }]);
+    const sig = s.last_signals || {}; const ex = $('explain'); const hours = Math.round((s.granularity || 21600) / 3600);
+    const items = (s.products || []).map(p => { const g = sig[p]; const held = st.positions && st.positions[p]; const head = held ? t.holding : t.waiting; const reason = g ? reasonText(g.reason) : (held ? '' : t.noposition); const side = g ? t.sides[g.side] || g.side : ''; return `<div class="sig"><b>${p}</b><div><div>${head}${side && g.side !== 'HOLD' ? ' · ' + side : ''}</div><div class="r">${reason}${g && g.price ? ' · ' + fmt(g.price) + ' ' + q : ''}</div></div></div>`; });
+    ex.innerHTML = items.join('') || `<div class="empty">${t.noposition}</div>`;
+    $('explain-note').textContent = t.explain_note(hours, 20, 100);
+    const eq = await api('/api/equity?limit=3000'); CURVE = eq; INITIAL = st.initial_capital || 0; drawChart();
+    $('eqrange').textContent = eq.length ? `${dt(eq[0].ts)} – ${dt(eq[eq.length - 1].ts)} · ${q}` : '';
     const orders = await api('/api/orders?limit=100');
-    table('orders', orders, [{h:'Time', f:r=>r.updated_at.slice(0,16).replace('T',' ')}, {h:'Side', f:r=>r.side, cls:r=>r.side==='BUY'?'up':'down'}, {h:'Product', f:r=>r.product},
-      {h:'Qty', f:r=>fmt(r.filled_qty||r.qty,6), num:1}, {h:'Price', f:r=>fmt(r.avg_fill_price||r.price), num:1}, {h:'Fee', f:r=>fmt(r.fee,4), num:1},
-      {h:'P&L', f:r=>r.pnl==null?'–':fmt(r.pnl), num:1, cls:r=>r.pnl>=0?'up':'down'}, {h:'Status', f:r=>r.status}, {h:'Strategy', f:r=>r.strategy}, {h:'Reason', f:r=>r.reason}]);
+    table('orders', orders, [{ h: t.th.time, f: r => dt(r.updated_at) }, { h: t.th.side, f: r => `<span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${t.sides[r.side] || r.side}</span>` }, { h: t.th.product, f: r => r.product },
+      { h: t.th.qty, f: r => fmt(r.filled_qty || r.qty, 6), num: 1 }, { h: t.th.price, f: r => fmt(r.avg_fill_price || r.price), num: 1 }, { h: t.th.fee, f: r => fmt(r.fee, 4), num: 1 },
+      { h: t.th.pnl, f: r => r.pnl == null ? '–' : fmt(r.pnl), num: 1, cls: r => r.pnl >= 0 ? 'up' : 'down' }, { h: t.th.status, f: r => t.status[r.status] || r.status }, { h: t.th.strategy, f: r => r.strategy }, { h: t.th.reason, f: r => r.reason }]);
     const ev = await api('/api/events?limit=150');
-    table('events', ev, [{h:'Time', f:r=>r.ts.slice(0,19).replace('T',' ')}, {h:'Kind', f:r=>r.kind, cls:r=>({halt:'down',error:'down',fill:'up'})[r.kind]||''}, {h:'Detail', f:r=>r.detail.length>160?r.detail.slice(0,160)+'…':r.detail}]);
-  } catch (e) { $('updated').textContent = 'error: ' + e.message; }
+    table('events', ev, [{ h: t.th.time, f: r => dt(r.ts) }, { h: t.th.kind, f: r => t.kinds[r.kind] || r.kind, cls: r => ({ halt: 'down', error: 'down', fill: 'up', order_rejected: 'warnc' })[r.kind] || '' }, { h: t.th.detail, f: r => r.detail.length > 170 ? r.detail.slice(0, 170) + '…' : r.detail }]);
+  } catch (e) {
+    if (e.status === 401) { $('meta').textContent = t.need_token; pill('p-engine', '', '…'); } else { $('meta').textContent = (t.failed) + ': ' + e.message; }
+  }
 }
 async function control(action) {
-  if (action !== 'resume' && !confirm(`Really ${action.toUpperCase()}?`)) return;
-  try { const r = await api('/api/control/' + action, {method:'POST'}); $('ctlmsg').textContent = JSON.stringify(r); refresh(); } catch (e) { $('ctlmsg').textContent = 'failed: ' + e.message; }
+  if (!confirm(T().confirm(action))) return;
+  try { await api('/api/control/' + action, { method: 'POST' }); toast(T().done); refresh(); } catch (e) { toast(T().failed + ' (' + e.message + ')'); }
 }
-$('token').value = localStorage.getItem('token') || '';
+document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => control(b.dataset.act));
+document.querySelectorAll('#lang button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
+$('theme').onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; localStorage.setItem('theme', next); drawChart(); };
+$('eye').onclick = () => { const i = $('token'); i.type = i.type === 'password' ? 'text' : 'password'; };
 let tokenTimer = null;
 $('token').addEventListener('input', () => { clearTimeout(tokenTimer); tokenTimer = setTimeout(() => { $('token').value = cleanToken($('token').value); refresh(); }, 400); });
 $('token').addEventListener('keydown', e => { if (e.key === 'Enter') { $('token').value = cleanToken($('token').value); refresh(); } });
-refresh(); setInterval(refresh, 30000);
+window.addEventListener('resize', drawChart);
+try { const th = localStorage.getItem('theme'); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+$('token').value = localStorage.getItem('token') || '';
+setLang(LANG);
+setInterval(refresh, 30000);
 </script>
 </body>
 </html>
