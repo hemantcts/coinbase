@@ -160,6 +160,17 @@ by `DASHBOARD_TOKEN`. Disabling the API key in Coinbase stops everything.
 
 ## Deployment (EU VPS, Docker)
 
+Fresh Ubuntu server, as root, one command:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/hemantcts/coinbase/main/deploy/bootstrap-vps.sh)
+```
+
+`deploy/bootstrap-vps.sh` installs security updates, a firewall that allows
+SSH only, fail2ban and Docker, clones this repository into `/opt/coinbase-trader`,
+writes `.env` with a random dashboard token, and starts the paper trader and
+the dashboard. Re-running it updates the code. By hand it is:
+
 ```bash
 cp .env.example .env && mkdir -p data && chmod 700 data
 sudo chown 10001:10001 data              # the container runs as uid 10001
