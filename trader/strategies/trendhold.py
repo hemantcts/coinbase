@@ -1,9 +1,11 @@
 """Slow trend-hold: be long while the fast EMA sits above the slow EMA, otherwise stay in cash.
 
-Designed for 6-hour candles and a small account with 0.6 % fees: a handful of
-trades per quarter, a wide ATR trailing stop handled by the risk controller,
-no take-profit. In testing on 2026 BTC-EUR / ETH-EUR data this was the only
-approach that stayed positive after costs; faster timeframes bled on fees.
+Designed for 6-hour candles and a small account with 0.6 % fees: one or two
+trades a month, a wide ATR trailing stop handled by the risk controller, no
+take-profit. EMA 20/100 on 6h candles (5 days / 25 days) was the most
+consistent setting across two years of BTC-EUR / ETH-EUR history: never the
+best in any half-year, never the worst, and ahead of buy-and-hold over the
+full period. Faster settings bled on fees; see docs/RESEARCH-2026-10.md.
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ class TrendHold(Strategy):
     name = "trendhold"
     stop_mode = "atr"
 
-    def __init__(self, fast: int = 12, slow: int = 36, atr_window: int = 14, expected_atr_multiple: float = 3.0):
+    def __init__(self, fast: int = 20, slow: int = 100, atr_window: int = 14, expected_atr_multiple: float = 3.0):
         self.fast = fast
         self.slow = slow
         self.atr_window = atr_window

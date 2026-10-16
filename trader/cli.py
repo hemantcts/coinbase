@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import __version__
 from .backtest import compare, format_table, walk_forward
-from .config import PROFILES, Settings, pilot_profile
+from .config import PROFILES, Costs, Settings, pilot_profile
 from .data import CoinbasePublic
 from .engine import Engine
 from .execution.paper import PaperBroker
@@ -69,7 +69,10 @@ def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
     start, end = _period(args)
     strategies = list(ALL) + ["ensemble"] if args.strategy == "all" else [args.strategy]
     profiles = list(PROFILES) if args.profile == "all" else [args.profile]
-    kw = dict(capital=args.capital or settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity)
+    kw = dict(capital=args.capital or settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity,
+              halt_reset_days=args.halt_reset_days)
+    if args.fee is not None:
+        kw["costs"] = Costs(args.fee, settings.costs.slippage_rate)
     products = args.products or settings.products
     print(f"Backtest {products} {start:%Y-%m-%d} .. {end:%Y-%m-%d}, {settings.granularity}s candles, "
           f"fees {settings.costs.fee_rate:.2%}, slippage {settings.costs.slippage_rate:.2%}")
@@ -286,6 +289,9 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--capital", type=float)
     s.add_argument("--products", nargs="*")
     s.add_argument("--walk-forward", action="store_true")
+    s.add_argument("--fee", type=float, help="override FEE_RATE for this run, e.g. 0.004")
+    s.add_argument("--halt-reset-days", type=int, default=0,
+                   help="research only: clear a total-loss halt after N days (live: never)")
     s.add_argument("--json"); s.add_argument("--curves", action="store_true", help="include equity curves in --json")
     s = sub.add_parser("gate", help="run the automatic release checks")
     s.add_argument("--start"); s.add_argument("--end"); s.add_argument("--days", type=int)

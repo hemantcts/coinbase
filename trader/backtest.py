@@ -33,7 +33,8 @@ class BacktestResult:
     initial: float
     final: float
     net_return: float               # fraction
-    max_drawdown: float             # fraction
+    max_drawdown: float             # fraction, peak to trough
+    max_loss_from_start: float      # fraction, lowest equity vs starting capital (what the total-loss halt watches)
     round_trips: int
     buys: int
     sells: int
@@ -47,7 +48,7 @@ class BacktestResult:
     sharpe: float                   # annualised, from daily returns
     exposure_pct: float             # share of cycles with an open position
     halted_total: bool
-    daily_halts: int
+    daily_halts: int               # all halt events (daily + total)
     stop_outs: int
     take_profits: int
     equity_curve: list[tuple[str, float]] = field(default_factory=list)
@@ -62,6 +63,7 @@ class BacktestResult:
         return {
             "strategy": self.strategy, "profile": self.profile, "days": round(self.days, 1),
             "net_%": round(100 * self.net_return, 2), "maxDD_%": round(100 * self.max_drawdown, 2),
+            "worst_%": round(-100 * self.max_loss_from_start, 2),
             "trades": self.round_trips, "win_%": round(100 * self.win_rate, 1), "PF": round(self.profit_factor, 2),
             "fees": round(self.fees, 2), "fee_drag_%": round(100 * self.fee_drag, 2), "sharpe": round(self.sharpe, 2),
             "exposure_%": round(100 * self.exposure_pct, 1), "stops": self.stop_outs, "tps": self.take_profits,
@@ -76,14 +78,16 @@ def _ts(dt: datetime) -> int:
 def run_backtest(candle_store: Store, products: list[str], strategy: str, profile: str | RiskProfile,
                  start: datetime, end: datetime, capital: float = 1000.0, costs: Costs | None = None,
                  granularity: int = 300, history: int = 300, specs: dict[str, ProductSpec] | None = None,
-                 verbose: bool = False) -> BacktestResult:
+                 verbose: bool = False, halt_reset_days: int = 0) -> BacktestResult:
     costs = costs or Costs()
     prof = PROFILES[profile] if isinstance(profile, str) else profile
     settings = Settings(products=list(products), granularity=granularity, history_candles=history, costs=costs,
                         starting_capital_report=capital, quote_currency="EUR", report_currency="EUR")
     result_store = Store(":memory:")
     data = StoreDataSource(candle_store, granularity, specs)
-    engine = Engine(settings, result_store, PaperBroker(costs), build(strategy), RiskController(prof, costs, specs),
+    risk = RiskController(prof, costs, specs)
+    risk.halt_reset_days = halt_reset_days
+    engine = Engine(settings, result_store, PaperBroker(costs), build(strategy), risk,
                     data, fx=None, mode="backtest", verbose=verbose)
 
     # Timeline: every candle close inside [start, end] across all products.
@@ -123,8 +127,10 @@ def _metrics(engine: Engine, store: Store, fills: list[dict[str, Any]], curve: l
     final = state.equity()
     peak = capital
     max_dd = 0.0
+    lowest = capital
     for _, eq in curve:
         peak = max(peak, eq)
+        lowest = min(lowest, eq)
         if peak > 0:
             max_dd = max(max_dd, 1 - eq / peak)
     sells = [f for f in fills if f["side"] == "SELL"]
@@ -157,7 +163,7 @@ def _metrics(engine: Engine, store: Store, fills: list[dict[str, Any]], curve: l
         start=datetime.fromtimestamp(timeline[0], tz=timezone.utc).isoformat(timespec="minutes"),
         end=datetime.fromtimestamp(timeline[-1], tz=timezone.utc).isoformat(timespec="minutes"),
         days=days, cycles=len(curve), initial=capital, final=final, net_return=final / capital - 1 if capital else 0.0,
-        max_drawdown=max_dd, round_trips=len(sells), buys=len(buys), sells=len(sells),
+        max_drawdown=max_dd, max_loss_from_start=(1 - lowest / capital) if capital else 0.0, round_trips=len(sells), buys=len(buys), sells=len(sells),
         win_rate=len(wins) / len(pnls) if pnls else 0.0, profit_factor=pf if pf != math.inf else 99.0,
         gross_profit=gross_profit, gross_loss=gross_loss, fees=fees, fee_drag=fees / capital if capital else 0.0,
         avg_trade_pnl=sum(pnls) / len(pnls) if pnls else 0.0, sharpe=sharpe,

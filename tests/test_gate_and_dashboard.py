@@ -15,7 +15,7 @@ from trader.store import Store
 
 def _result(**kw) -> BacktestResult:
     base = dict(strategy="ensemble", profile="medium", products=["BTC-EUR"], start="a", end="b", days=30, cycles=100,
-                initial=1000, final=1030, net_return=0.03, max_drawdown=0.03, round_trips=8, buys=8, sells=8, win_rate=0.5,
+                initial=1000, final=1030, net_return=0.03, max_drawdown=0.03, max_loss_from_start=0.02, round_trips=8, buys=8, sells=8, win_rate=0.5,
                 profit_factor=1.3, gross_profit=60, gross_loss=30, fees=20, fee_drag=0.02, avg_trade_pnl=3, sharpe=1,
                 exposure_pct=0.3, halted_total=False, daily_halts=0, stop_outs=2, take_profits=3)
     base.update(kw)
@@ -24,8 +24,8 @@ def _result(**kw) -> BacktestResult:
 
 def test_backtest_checks():
     assert all(c.passed for c in backtest_checks(_result(), PROFILES["medium"]))
-    bad = backtest_checks(_result(net_return=-0.01, max_drawdown=0.1, round_trips=2, halted_total=True, fees=50), PROFILES["medium"])
-    assert [c.name for c in bad if not c.passed] == ["oos_net_return_positive", "oos_drawdown_within_limit", "oos_enough_trades",
+    bad = backtest_checks(_result(net_return=-0.01, max_loss_from_start=0.1, round_trips=2, halted_total=True, fees=50), PROFILES["medium"])
+    assert [c.name for c in bad if not c.passed] == ["oos_net_return_positive", "oos_loss_within_limit", "oos_enough_trades",
                                                      "oos_not_halted", "fees_below_half_of_gross_profit"]
 
 

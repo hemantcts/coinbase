@@ -24,7 +24,7 @@ market data ──> strategies ──> risk controller ──> broker ──> le
 
 * **Strategies** (`trader/strategies/`) only see candles and return a signal
   with an *estimate* of the favourable move. They never see the account.
-  `trendhold` (default) is a slow EMA 12/36 trend-hold on 6-hour candles with
+  `trendhold` (default) is a slow EMA 20/100 trend-hold on 6-hour candles with
   a wide ATR trailing stop and no target. `trend`, `momentum` and
   `mean_reversion` are the fast intraday rules from the brief; they are kept
   for comparison because on real data they lose to fees (see *Results*).
@@ -42,34 +42,31 @@ market data ──> strategies ──> risk controller ──> broker ──> le
   The CHF→EUR rate is fetched from ECB reference rates (frankfurter.app) and
   stored with its timestamp; every snapshot records the rate it used.
 
-## Results so far (BTC-EUR + ETH-EUR, 20 Jun – 16 Oct 2026, 0.6 % fee, 0.1 % slippage)
+## Results (two years of BTC-EUR + ETH-EUR, 16 Oct 2024 – 16 Oct 2026, 0.6 % fee, 0.1 % slippage)
 
-The candle history is committed under `data/history/` so these runs are reproducible
-with `python -m trader import-history` followed by the commands below.
+Full report with method, tables and the client-facing conclusions: [docs/RESEARCH-2026-10.md](docs/RESEARCH-2026-10.md).
+The candle history is committed under `data/history/` so every number is reproducible.
 
-| strategy | candles | net | max DD | trades | fees | note |
+| strategy | candles | net | worst vs start | peak-to-trough DD | trades | fees |
 |---|---|---|---|---|---|---|
-| buy & hold, 2 × 25 % | – | +19.4 % | – | 0 | 0 | the benchmark: BTC +32 %, ETH +46 % |
-| trendhold, medium | 6 h | **+12.9 %** | 4.8 % | 9 | 27.78 | wide ATR stop never hit |
-| trendhold, low / high | 6 h | +5.6 % / +17.3 % | 2.9 % / 6.4 % | 10 / 9 | 18 / 37 | |
-| trend (EMA + volume) | 6 h | −3.1 % | 6.9 % | 16 | 47.81 | |
-| momentum | 6 h | −3.2 % | 4.9 % | 12 | 35.81 | |
-| mean reversion | 6 h | −0.2 % | 1.0 % | 2 | 5.99 | |
-| any strategy | 1 h or 5 min | −1 % to −11 % | | 4–24 | 7–91 | fees and noise stops |
+| buy & hold, 2 × 25 % | – | +2.1 % | | ~30 % | 0 | 0 |
+| **trendhold EMA 20/100, medium** | 6 h | **+14.1 %** | −2.2 % | 17.6 % | 37 | 113 |
+| trendhold, low / high | 6 h | +5.4 % / +28.5 % | −1.8 % / −4.8 % | 11.9 % / 23.5 % | 56 / 32 | 101 / 131 |
+| trend (EMA + volume) | 6 h | −9.0 % | loss limit hit | | 16 | 47 |
+| momentum | 6 h | −7.6 % | loss limit hit | | 20 | 60 |
+| mean reversion | 6 h | −2.7 % | | 4.6 % | 12 | 36 |
+| any strategy | 1 h or faster | −1 % to −11 % | | | | fees and noise stops |
 
-Walk-forward for `trendhold` medium: in-sample (first 60 %) +12.3 %, out-of-sample
-(last 47 days, a flat market) +0.2 % with 4 trades. That is "did not lose", not
-proof of an edge. A raw signal study showed the three fast strategies have no
-predictive power at any horizon: the average move after a BUY signal is
-+0.1 % to +0.4 % per day, the same as the market's drift. Even with fees cut
-to 0.1 % they lose. Trend-hold trails buy-and-hold in a straight bull run by
-design; its job is to be in cash when the trend turns, which this four-month
-sample has not tested yet.
+Half-year by half-year, trend-hold 20/100 took roughly half of the market's upside and avoided more
+than half of its downside, in every window. Out-of-sample (last ten months, into the bear market) the
+medium profile tripped the brief's permanent 8 % loss limit after seven trades and stood still; the low
+profile ended +1.7 %, the high profile +9.9 %. The loss limit and the strategy need a decision from the
+owner, see the report. The three fast strategies have no measurable edge at any timeframe or fee level.
 
 ```bash
 python -m trader import-history
-python -m trader backtest --strategy all --profile medium --days 118 --granularity 21600
-python -m trader backtest --strategy trendhold --profile medium --days 118 --granularity 21600 --walk-forward
+python -m trader backtest --strategy all --profile medium --days 730 --granularity 21600
+python -m trader backtest --strategy trendhold --profile all --days 730 --granularity 21600 --walk-forward
 ```
 
 ## Risk profiles
@@ -98,7 +95,7 @@ cp .env.example .env                                  # edit as needed
 pytest -q                                             # 44 tests
 
 python -m trader profiles                             # limits in CHF
-python -m trader fetch-history --days 730 --granularity 21600   # cache 6-hour candles
+python -m trader fetch-history --days 730 --granularity 21600   # cache 6-hour candles (or import-history)
 python -m trader backtest --strategy all --profile all --days 365
 python -m trader backtest --strategy trendhold --profile medium --days 365 --walk-forward --json backtest.json
 python -m trader resample-history --source 3600 --target 21600  # build 6h candles from cached 1h ones
@@ -201,8 +198,9 @@ tests/             44 unit and integration tests
 ## Known limitations
 
 * Paper fills use candle close ± slippage, not the live order book.
-* Four months of history, all bull market. Judge `trendhold` only after a
-  backtest across a bear phase (fetch 2 years) and the 72-hour paper run.
+* Two years of history is one market cycle. Treat the backtest as a plausibility
+  check, not a forecast, and judge the agent on the 30-day paper run and the
+  small-money pilot.
 * The ensemble opens on the strongest cost-adjusted signal; there is no
   trained predictive model yet. Whether one adds value is a measurement to
   run with the backtester, not an assumption.

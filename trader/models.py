@@ -141,6 +141,7 @@ class PortfolioState:
     day_start_equity: float = 0.0
     halted_daily: bool = False
     halted_total: bool = False
+    halted_total_at: str = ""                    # ISO day the total halt tripped
     new_positions_today: int = 0
     realised_pnl: float = 0.0
     fees_paid: float = 0.0
@@ -163,6 +164,7 @@ class PortfolioState:
             "day_start_equity": self.day_start_equity,
             "halted_daily": self.halted_daily,
             "halted_total": self.halted_total,
+            "halted_total_at": self.halted_total_at,
             "new_positions_today": self.new_positions_today,
             "realised_pnl": self.realised_pnl,
             "fees_paid": self.fees_paid,
@@ -184,6 +186,7 @@ class PortfolioState:
             day_start_equity=float(d.get("day_start_equity", 0.0)),
             halted_daily=bool(d.get("halted_daily", False)),
             halted_total=bool(d.get("halted_total", False)),
+            halted_total_at=d.get("halted_total_at", ""),
             new_positions_today=int(d.get("new_positions_today", 0)),
             realised_pnl=float(d.get("realised_pnl", 0.0)),
             fees_paid=float(d.get("fees_paid", 0.0)),

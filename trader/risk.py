@@ -42,6 +42,9 @@ class RiskController:
         self.costs = costs
         self.specs = specs or {}
         self.manual_stop = False       # set by the engine when the STOP file exists
+        # Research only: days after which a total-loss halt clears itself. 0 = never (live behaviour:
+        # the owner reviews the cause and restarts by hand).
+        self.halt_reset_days = 0
 
     # ---- day roll and halts -------------------------------------------------
 
@@ -54,6 +57,13 @@ class RiskController:
         state.day_start_equity = state.equity()
         state.halted_daily = False
         state.new_positions_today = 0
+        if state.halted_total and self.halt_reset_days > 0 and state.halted_total_at:
+            tripped = datetime.fromisoformat(state.halted_total_at).date()
+            if (now.astimezone(timezone.utc).date() - tripped).days >= self.halt_reset_days:
+                state.halted_total = False
+                state.halted_total_at = ""
+                # Re-base the loss limit on the current equity, as an owner restarting the bot would.
+                state.initial_capital = state.equity()
         return True
 
     def update_halts(self, state: PortfolioState) -> list[str]:
@@ -64,6 +74,7 @@ class RiskController:
         total_floor = state.initial_capital * (1 - p.total_loss_fraction)
         if not state.halted_total and equity <= total_floor:
             state.halted_total = True
+            state.halted_total_at = state.day or ""
             events.append(f"TOTAL LOSS LIMIT: equity {equity:.2f} <= {total_floor:.2f}")
         if state.day_start_equity > 0:
             daily_floor = state.day_start_equity * (1 - p.daily_loss_fraction)

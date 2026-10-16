@@ -15,18 +15,18 @@ from trader.strategies.trendhold import TrendHold
 
 
 def test_trendhold_buys_in_uptrend_and_sells_on_cross_down():
-    up = make_candles(80, drift=0.004, vol=0.004, seed=21)
+    up = make_candles(160, drift=0.004, vol=0.004, seed=21)
     sig = TrendHold().evaluate("BTC-EUR", up, None)
     assert sig.side == Side.BUY and sig.atr > 0 and sig.expected_move > 0
-    down = up + make_candles(40, start_price=up[-1].close, drift=-0.006, vol=0.004, seed=22, t0=up[-1].ts + G)
+    down = up + make_candles(80, start_price=up[-1].close, drift=-0.006, vol=0.004, seed=22, t0=up[-1].ts + G)
     pos = Position("BTC-EUR", 1.0, up[-1].close, "x", "trendhold", 0.0, 0.0)
     assert TrendHold().evaluate("BTC-EUR", down, pos).side == Side.SELL
     assert TrendHold().evaluate("BTC-EUR", up[:20], None).side == Side.HOLD      # warmup
 
 
 def test_trendhold_expected_move_scales_with_volatility_so_fast_candles_fail_the_cost_filter():
-    calm = make_candles(80, drift=0.001, vol=0.0005, seed=23)
-    wild = make_candles(80, drift=0.004, vol=0.01, seed=23)
+    calm = make_candles(160, drift=0.001, vol=0.0005, seed=23)
+    wild = make_candles(160, drift=0.004, vol=0.01, seed=23)
     s_calm = TrendHold().evaluate("BTC-EUR", calm, None)
     s_wild = TrendHold().evaluate("BTC-EUR", wild, None)
     assert s_calm.side == Side.BUY and s_wild.side == Side.BUY
@@ -71,9 +71,9 @@ def test_trailing_stop_only_rises_and_zero_levels_mean_none():
 
 def test_engine_records_trail_settings_and_trails_in_backtest():
     store = Store(":memory:")
-    rows = make_candles(60, drift=0.0, vol=0.0005, seed=24) + make_candles(60, start_price=100, drift=0.01, vol=0.004, seed=25, t0=60 * G)
+    rows = make_candles(120, drift=0.0, vol=0.0005, seed=24) + make_candles(150, start_price=100, drift=0.01, vol=0.012, seed=25, t0=120 * G)
     store.save_candles("BTC-EUR", G, rows)
-    s = Settings(products=["BTC-EUR"], granularity=G, history_candles=100)
+    s = Settings(products=["BTC-EUR"], granularity=G, history_candles=300)
     eng = Engine(s, store, PaperBroker(s.costs), build("trendhold"), RiskController(PROFILES["medium"], s.costs),
                  StoreDataSource(store, G), fx=None, mode="backtest", verbose=False)
     eng.init_state(datetime.fromtimestamp(rows[0].ts + G, tz=timezone.utc))
