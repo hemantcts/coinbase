@@ -109,7 +109,7 @@ python -m trader backtest --strategy all --profile all --days 365
 python -m trader backtest --strategy trendhold --profile medium --days 365 --walk-forward --json backtest.json
 python -m trader resample-history --source 3600 --target 21600  # build 6h candles from cached 1h ones
 python -m trader paper                                # paper trade on live market data (Ctrl-C to stop)
-python -m trader dashboard                            # http://127.0.0.1:8090
+python -m trader dashboard                            # http://127.0.0.1:8080 (outside Docker)
 python -m trader status
 python -m trader control stop | resume | flatten
 ```
