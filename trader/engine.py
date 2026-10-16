@@ -18,10 +18,21 @@ from .store import Store
 from .strategies.base import Strategy
 
 
+def candle_ts_from_order_id(client_order_id: str) -> int | None:
+    """Client order ids look like '<mode>-<product>-<candle_ts>-<tag>[-r<n>]'; products contain hyphens."""
+    parts = client_order_id.split("-")
+    if len(parts) >= 2 and parts[-1].startswith("r") and parts[-1][1:].isdigit():
+        parts = parts[:-1]
+    try:
+        return int(parts[-2])
+    except (IndexError, ValueError):
+        return None
+
+
 class Engine:
     def __init__(self, settings: Settings, store: Store, broker: Broker, strategy: Strategy, risk: RiskController,
                  data: DataSource, fx: FxService | None = None, notifier: Notifier | None = None,
-                 mode: str = "paper", verbose: bool = True, order_timeout: int = 180):
+                 mode: str = "paper", verbose: bool = True, order_timeout: int | None = None):
         self.settings = settings
         self.store = store
         self.broker = broker
@@ -32,7 +43,8 @@ class Engine:
         self.notifier = notifier or Notifier()
         self.mode = mode
         self.verbose = verbose
-        self.order_timeout = order_timeout
+        self.order_timeout = order_timeout if order_timeout is not None else settings.order_timeout
+        self.risk.halt_reset_days = settings.halt_reset_days if mode != "backtest" else self.risk.halt_reset_days
         self.state: PortfolioState | None = None
         self.last_signals: dict[str, Signal] = {}
         self.last_rejections: dict[str, str] = {}
@@ -148,7 +160,7 @@ class Engine:
                 continue
             intent = self.risk.protective_exit(pos, last)
             if intent:
-                self._execute(intent, now, last.ts, "EXIT")
+                self._execute(intent, now, last.ts, "EXIT", urgent=True)
             elif pos.trail_atr_k > 0:
                 new_stop = self.risk.trail_stop(pos, rows)
                 if new_stop is not None:
@@ -161,7 +173,7 @@ class Engine:
                 if not price:
                     continue
                 sig = Signal(product, Side.SELL, "manual", 1.0, 0.0, "FLATTEN requested")
-                self._execute(OrderIntent(product, Side.SELL, price, sig, sig.reason), now, int(now.timestamp()), "FLATTEN")
+                self._execute(OrderIntent(product, Side.SELL, price, sig, sig.reason), now, int(now.timestamp()), "FLATTEN", urgent=True)
             if not state.positions:
                 try:
                     s.flatten_file.unlink()
@@ -203,7 +215,7 @@ class Engine:
 
     # ---- execution -------------------------------------------------------------------
 
-    def _execute(self, intent: OrderIntent, now: datetime, candle_ts: int, tag: str) -> Order | None:
+    def _execute(self, intent: OrderIntent, now: datetime, candle_ts: int, tag: str, urgent: bool = False) -> Order | None:
         state = self.state
         assert state is not None
         decision = self.risk.review(intent, state)
@@ -215,19 +227,30 @@ class Engine:
                 self._log(now, "rejected", {"product": intent.product, "side": intent.side.value, "reason": decision.reason,
                                             "strategy": intent.signal.strategy, "expected_move": intent.signal.expected_move})
             return None
-        coid = f"{self.mode}-{intent.product}-{candle_ts}-{tag}"
-        order = self.store.get_order(coid)
-        if order is not None and order.is_done:
-            return order            # already handled before a restart
+        base = f"{self.mode}-{intent.product}-{candle_ts}-{tag}"
+        previous = self.store.orders_with_prefix(base)
+        order: Order | None = None
+        attempt = 0
+        if previous:
+            last = previous[-1]
+            if not last.is_done:
+                order = last                       # open order from a previous run: ask the venue first
+            elif last.status == OrderStatus.CANCELLED and last.filled_qty == 0 and last.attempt < self.settings.order_retries:
+                attempt = last.attempt + 1         # unfilled post-only order: re-price, last attempt goes marketable
+            else:
+                return last                        # already handled (filled, rejected, or retries exhausted)
         if order is None:
+            coid = base if attempt == 0 else f"{base}-r{attempt}"
+            final = attempt >= self.settings.order_retries
             order = Order(client_order_id=coid, product=intent.product, side=intent.side, qty=decision.qty,
                           price=intent.price, status=OrderStatus.NEW, created_at=iso(now), updated_at=iso(now),
                           strategy=intent.signal.strategy, reason=intent.reason or intent.signal.reason, mode=self.mode,
-                          stop_price=decision.stop_price, take_profit_price=decision.take_profit_price)
+                          stop_price=decision.stop_price, take_profit_price=decision.take_profit_price,
+                          urgent=urgent or final, attempt=attempt)
             self.store.save_order(order)          # persisted before submission: crash-safe
             order = self.broker.submit(order)
         else:
-            order = self.broker.status(order)      # open order from a previous run: ask the venue first
+            order = self.broker.status(order)
         order.updated_at = iso(now)
         return self._settle(order, decision, now)
 
@@ -273,6 +296,12 @@ class Engine:
                 self._settle(fresh, None, now)
             else:
                 self.store.save_order(fresh)
+                if fresh.status == OrderStatus.CANCELLED and fresh.filled_qty == 0:
+                    # Let the next cycle re-evaluate this candle and re-price the order.
+                    candle_ts = candle_ts_from_order_id(fresh.client_order_id)
+                    if candle_ts is not None:
+                        self.store.unmark_processed(fresh.product, candle_ts)
+                    self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
 
     # ---- helpers -----------------------------------------------------------------------
 

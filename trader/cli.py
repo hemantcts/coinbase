@@ -38,7 +38,8 @@ def cmd_profiles(settings: Settings, args: argparse.Namespace) -> int:
         rows.append({"profile": name, **{k: round(v, 2) for k, v in a.items()},
                      "max_new/day": p.max_new_positions_per_day, "stop_%": p.stop_loss_pct * 100, "target_%": p.take_profit_pct * 100,
                      "edge_x_costs": p.min_edge_multiple})
-    print(f"Risk profiles for {cap:.0f} {settings.report_currency} (round-trip cost assumed {settings.costs.round_trip:.2%}):")
+    print(f"Risk profiles for {cap:.0f} {settings.report_currency} (round trip assumed {settings.costs.round_trip:.2%}: "
+          f"maker {settings.costs.fee_rate:.2%} in, taker {settings.costs.taker_fee_rate:.2%} out, slippage {settings.costs.slippage_rate:.2%} x2):")
     print(format_table(rows))
     pp = pilot_profile(settings.profile)
     print(f"\nLive pilot caps on '{settings.profile.name}': max position {pp.max_position_fraction*cap:.0f}, max invested {pp.max_exposure_fraction*cap:.0f} {settings.report_currency}")
@@ -69,13 +70,17 @@ def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
     start, end = _period(args)
     strategies = list(ALL) + ["ensemble"] if args.strategy == "all" else [args.strategy]
     profiles = list(PROFILES) if args.profile == "all" else [args.profile]
+    if args.halt_reset_days is None:
+        args.halt_reset_days = settings.halt_reset_days
     kw = dict(capital=args.capital or settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity,
               halt_reset_days=args.halt_reset_days)
     if args.fee is not None:
-        kw["costs"] = Costs(args.fee, settings.costs.slippage_rate)
+        kw["costs"] = Costs(args.fee, args.taker_fee if args.taker_fee is not None else settings.costs.taker_fee_rate,
+                            settings.costs.slippage_rate)
     products = args.products or settings.products
+    c = kw["costs"]
     print(f"Backtest {products} {start:%Y-%m-%d} .. {end:%Y-%m-%d}, {settings.granularity}s candles, "
-          f"fees {settings.costs.fee_rate:.2%}, slippage {settings.costs.slippage_rate:.2%}")
+          f"maker {c.fee_rate:.2%}, taker {c.taker_fee_rate:.2%} (stops), slippage {c.slippage_rate:.2%}, halt pause {args.halt_reset_days}d")
     if args.walk_forward:
         rows, out = [], {}
         for s in strategies:
@@ -114,6 +119,13 @@ def _make_engine(settings: Settings, mode: str) -> Engine:
             raise RuntimeError("API key cannot trade")
         profile = pilot_profile(settings.profile)
         specs = {p: broker.spec(p) for p in settings.products}
+        tier = broker.fee_tier()
+        if tier["maker_fee_rate"] > settings.costs.fee_rate or tier["taker_fee_rate"] > settings.costs.taker_fee_rate:
+            print(f"Account fee tier {tier['pricing_tier']} (maker {tier['maker_fee_rate']:.2%}, taker {tier['taker_fee_rate']:.2%}) "
+                  f"is dearer than configured; using the real rates.")
+            settings.costs = Costs(max(tier["maker_fee_rate"], settings.costs.fee_rate),
+                                   max(tier["taker_fee_rate"], settings.costs.taker_fee_rate), settings.costs.slippage_rate)
+            broker.costs = settings.costs
     else:
         broker = PaperBroker(settings.costs)
         profile = settings.profile
@@ -155,6 +167,9 @@ def cmd_verify_live(settings: Settings, args: argparse.Namespace) -> int:
         return 1
     bal = broker.balances()
     print("Balances:", json.dumps({k: v for k, v in bal.items() if v}, indent=2))
+    tier = broker.fee_tier()
+    print(f"Fee tier {tier['pricing_tier']}: maker {tier['maker_fee_rate']:.2%}, taker {tier['taker_fee_rate']:.2%}, "
+          f"30d volume {tier['volume_30d']:.0f}  (configured: maker {settings.costs.fee_rate:.2%}, taker {settings.costs.taker_fee_rate:.2%})")
     for p in settings.products:
         print(p, broker.spec(p))
     ok, why = gate_status(settings)
@@ -289,9 +304,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--capital", type=float)
     s.add_argument("--products", nargs="*")
     s.add_argument("--walk-forward", action="store_true")
-    s.add_argument("--fee", type=float, help="override FEE_RATE for this run, e.g. 0.004")
-    s.add_argument("--halt-reset-days", type=int, default=0,
-                   help="research only: clear a total-loss halt after N days (live: never)")
+    s.add_argument("--fee", type=float, help="override the maker FEE_RATE for this run, e.g. 0.004")
+    s.add_argument("--taker-fee", type=float, help="override TAKER_FEE_RATE for this run")
+    s.add_argument("--halt-reset-days", type=int, default=None,
+                   help="pause after a total-loss halt in days (default: HALT_RESET_DAYS from .env; 0 = never resume)")
     s.add_argument("--json"); s.add_argument("--curves", action="store_true", help="include equity curves in --json")
     s = sub.add_parser("gate", help="run the automatic release checks")
     s.add_argument("--start"); s.add_argument("--end"); s.add_argument("--days", type=int)

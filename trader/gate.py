@@ -103,7 +103,8 @@ def run_gate(settings: Settings, candle_store: Store, paper_store: Store, start:
              min_paper_hours: float = 72.0, write: bool = True) -> dict[str, Any]:
     profile = settings.profile
     ins, oos = walk_forward(candle_store, settings.products, settings.strategy, profile.name, start, end,
-                            capital=settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity)
+                            capital=settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity,
+                            halt_reset_days=settings.halt_reset_days)
     checks = backtest_checks(oos, profile) + paper_checks(paper_store, settings, min_paper_hours)
     passed = all(c.passed for c in checks)
     result = {

@@ -7,8 +7,12 @@ To place a single real order, ALL of the following must hold:
   4. the API key can trade but cannot transfer (checked at start)
 The pilot caps (10% per position, 20% invested) are applied on top of the profile.
 
-Orders are marketable limit orders with a client order id. If a request is
-interrupted, the order is looked up by that id before anything is resent.
+Entries and planned exits are post-only limit orders (maker fee) priced just
+inside the last close; the engine re-prices them if they do not fill and goes
+marketable on the last attempt. Urgent orders (stop-loss, flatten) are
+marketable limit orders from the start (taker fee). Every order carries a
+client order id; if a request is interrupted the order is looked up by that id
+before anything is resent.
 """
 from __future__ import annotations
 
@@ -84,6 +88,17 @@ class CoinbaseAdvancedBroker(Broker):
         return {"can_view": bool(d.get("can_view")), "can_trade": bool(d.get("can_trade")),
                 "can_transfer": bool(d.get("can_transfer")), "portfolio_type": str(d.get("portfolio_type", ""))}
 
+    def fee_tier(self) -> dict[str, Any]:
+        """Actual maker/taker rates for this account from the transaction summary."""
+        d = _d(self.client.get_transaction_summary())
+        tier = _d(d.get("fee_tier", {}))
+        return {
+            "pricing_tier": str(tier.get("pricing_tier", "")),
+            "maker_fee_rate": float(tier.get("maker_fee_rate", 0) or 0),
+            "taker_fee_rate": float(tier.get("taker_fee_rate", 0) or 0),
+            "volume_30d": float(d.get("advanced_trade_only_volume", 0) or 0),
+        }
+
     def balances(self) -> dict[str, float]:
         out: dict[str, float] = {}
         cursor = None
@@ -114,16 +129,21 @@ class CoinbaseAdvancedBroker(Broker):
     def submit(self, order: Order) -> Order:
         spec = self.spec(order.product)
         slip = self.costs.slippage_rate
-        limit = order.price * (1 + slip) if order.side == Side.BUY else order.price * (1 - slip)
+        if order.urgent:
+            # Marketable: cross the spread so it fills now. Taker fee.
+            limit = order.price * (1 + slip) if order.side == Side.BUY else order.price * (1 - slip)
+        else:
+            # Post-only: rest just inside the last close so it fills as maker, or not at all.
+            limit = order.price * (1 - slip) if order.side == Side.BUY else order.price * (1 + slip)
         size = _fmt(order.qty, spec.base_increment)
         price = _fmt(limit, spec.quote_increment)
+        kwargs = dict(client_order_id=order.client_order_id, product_id=order.product, base_size=size, limit_price=price,
+                      post_only=not order.urgent)
         try:
             if order.side == Side.BUY:
-                resp = self.client.limit_order_gtc_buy(client_order_id=order.client_order_id, product_id=order.product,
-                                                       base_size=size, limit_price=price)
+                resp = self.client.limit_order_gtc_buy(**kwargs)
             else:
-                resp = self.client.limit_order_gtc_sell(client_order_id=order.client_order_id, product_id=order.product,
-                                                        base_size=size, limit_price=price)
+                resp = self.client.limit_order_gtc_sell(**kwargs)
         except Exception as exc:
             # The request may have reached Coinbase. Look the order up before deciding anything.
             found = self._find_by_client_id(order)

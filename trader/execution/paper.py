@@ -25,7 +25,8 @@ class PaperBroker(Broker):
             fill = order.price * (1 + slip) if order.side == Side.BUY else order.price * (1 - slip)
             order.filled_qty = order.qty
             order.avg_fill_price = fill
-            order.fee = order.qty * fill * self.costs.fee_rate
+            rate = self.costs.taker_fee_rate if order.urgent else self.costs.fee_rate
+            order.fee = order.qty * fill * rate
             order.status = OrderStatus.FILLED
         order.mode = self.mode
         order.updated_at = order.updated_at or iso(utcnow())

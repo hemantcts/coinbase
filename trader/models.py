@@ -117,6 +117,8 @@ class Order:
     exchange_order_id: str = ""
     stop_price: float = 0.0
     take_profit_price: float = 0.0
+    urgent: bool = False          # must fill now (stop-loss, flatten): marketable, taker fee
+    attempt: int = 0              # live re-pricing attempts for the same decision
 
     @property
     def is_done(self) -> bool:

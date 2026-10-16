@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 from .models import Candle, Order, OrderStatus, PortfolioState, Side
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS orders (
     price REAL NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     filled_qty REAL NOT NULL DEFAULT 0, avg_fill_price REAL NOT NULL DEFAULT 0, fee REAL NOT NULL DEFAULT 0,
     strategy TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'paper',
-    exchange_order_id TEXT NOT NULL DEFAULT '', stop_price REAL NOT NULL DEFAULT 0, take_profit_price REAL NOT NULL DEFAULT 0, pnl REAL);
+    exchange_order_id TEXT NOT NULL DEFAULT '', stop_price REAL NOT NULL DEFAULT 0, take_profit_price REAL NOT NULL DEFAULT 0,
+    urgent INTEGER NOT NULL DEFAULT 0, attempt INTEGER NOT NULL DEFAULT 0, pnl REAL);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
 CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK (id = 1), updated_at TEXT NOT NULL, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -61,7 +62,14 @@ class Store:
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.executescript(_DDL)
+        self._migrate()
         self.set_meta("schema_version", str(SCHEMA_VERSION))
+
+    def _migrate(self) -> None:
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(orders)").fetchall()}
+        for col, ddl in (("urgent", "INTEGER NOT NULL DEFAULT 0"), ("attempt", "INTEGER NOT NULL DEFAULT 0")):
+            if col not in cols:
+                self.db.execute(f"ALTER TABLE orders ADD COLUMN {col} {ddl}")
 
     def close(self) -> None:
         self.db.close()
@@ -120,11 +128,12 @@ class Store:
     # ---- orders & fills -------------------------------------------------------
     def save_order(self, order: Order, pnl: float | None = None) -> None:
         d = order.to_dict()
+        d["urgent"] = int(order.urgent)
         with self.tx() as db:
             db.execute("""INSERT INTO orders(client_order_id,product,side,qty,price,status,created_at,updated_at,
-                filled_qty,avg_fill_price,fee,strategy,reason,mode,exchange_order_id,stop_price,take_profit_price,pnl)
+                filled_qty,avg_fill_price,fee,strategy,reason,mode,exchange_order_id,stop_price,take_profit_price,urgent,attempt,pnl)
                 VALUES (:client_order_id,:product,:side,:qty,:price,:status,:created_at,:updated_at,
-                :filled_qty,:avg_fill_price,:fee,:strategy,:reason,:mode,:exchange_order_id,:stop_price,:take_profit_price,:pnl)
+                :filled_qty,:avg_fill_price,:fee,:strategy,:reason,:mode,:exchange_order_id,:stop_price,:take_profit_price,:urgent,:attempt,:pnl)
                 ON CONFLICT(client_order_id) DO UPDATE SET status=excluded.status, updated_at=excluded.updated_at,
                 filled_qty=excluded.filled_qty, avg_fill_price=excluded.avg_fill_price, fee=excluded.fee,
                 exchange_order_id=excluded.exchange_order_id, pnl=COALESCE(excluded.pnl, orders.pnl)""",
@@ -143,6 +152,10 @@ class Store:
         sql += " ORDER BY created_at DESC LIMIT ?"
         args.append(limit)
         return [dict(r) for r in self.db.execute(sql, args).fetchall()]
+
+    def orders_with_prefix(self, prefix: str) -> list[Order]:
+        rows = self.db.execute("SELECT * FROM orders WHERE client_order_id LIKE ? ORDER BY attempt ASC", (prefix + "%",)).fetchall()
+        return [_row_to_order(r) for r in rows]
 
     def open_orders(self) -> list[Order]:
         rows = self.db.execute("SELECT * FROM orders WHERE status IN ('NEW','SUBMITTED','PARTIAL','UNKNOWN')").fetchall()
@@ -204,6 +217,9 @@ class Store:
     def mark_processed(self, product: str, candle_ts: int) -> None:
         self.db.execute("INSERT OR IGNORE INTO processed(product,candle_ts) VALUES (?,?)", (product, candle_ts))
 
+    def unmark_processed(self, product: str, candle_ts: int) -> None:
+        self.db.execute("DELETE FROM processed WHERE product=? AND candle_ts=?", (product, candle_ts))
+
     # ---- fx -----------------------------------------------------------------------
     def get_fx(self, day: str, base: str, quote: str) -> dict[str, Any] | None:
         r = self.db.execute("SELECT * FROM fx_rates WHERE day=? AND base=? AND quote=?", (day, base, quote)).fetchone()
@@ -220,4 +236,5 @@ def _row_to_order(r: sqlite3.Row) -> Order:
         status=OrderStatus(r["status"]), created_at=r["created_at"], updated_at=r["updated_at"], filled_qty=r["filled_qty"],
         avg_fill_price=r["avg_fill_price"], fee=r["fee"], strategy=r["strategy"], reason=r["reason"], mode=r["mode"],
         exchange_order_id=r["exchange_order_id"], stop_price=r["stop_price"], take_profit_price=r["take_profit_price"],
+        urgent=bool(r["urgent"]), attempt=int(r["attempt"]),
     )

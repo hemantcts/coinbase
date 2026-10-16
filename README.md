@@ -31,8 +31,13 @@ market data ──> strategies ──> risk controller ──> broker ──> le
 * **Risk controller** (`trader/risk.py`) reviews every order: max position,
   max invested, cash reserve, risk per trade, daily and total loss limits,
   max new positions per day, exchange minimums, and a cost filter: the
-  expected move must beat the round-trip fee + slippage by a safety margin.
-  A halt blocks new buys; exits, stop-loss and take-profit always go through.
+  expected move must beat maker fee in, taker fee out and slippage by a
+  safety margin. A halt blocks new buys; exits, stop-loss and take-profit
+  always go through. A total-loss halt pauses for `HALT_RESET_DAYS`, then
+  resumes with the limit re-based.
+* **Orders**: entries and planned exits are post-only limit orders (maker
+  fee), re-priced up to `ORDER_RETRIES` times if unfilled, marketable on the
+  last attempt. Stop-loss and flatten are marketable at once (taker fee).
 * **Engine** (`trader/engine.py`) runs one cycle per closed candle. Orders get
   deterministic client ids, are written to the database *before* submission
   and never re-run for a candle that was already processed. Restarts restore
@@ -47,11 +52,15 @@ market data ──> strategies ──> risk controller ──> broker ──> le
 Full report with method, tables and the client-facing conclusions: [docs/RESEARCH-2026-10.md](docs/RESEARCH-2026-10.md).
 The candle history is committed under `data/history/` so every number is reproducible.
 
+Costs: maker 0.6 % on entries and planned exits, taker 1.2 % on stop-loss exits, 0.1 % slippage per fill
+(Coinbase entry tier, the worst case). Total-loss stop pauses 30 days, then resumes.
+
 | strategy | candles | net | worst vs start | peak-to-trough DD | trades | fees |
 |---|---|---|---|---|---|---|
 | buy & hold, 2 × 25 % | – | +2.1 % | | ~30 % | 0 | 0 |
-| **trendhold EMA 20/100, medium** | 6 h | **+14.1 %** | −2.2 % | 17.6 % | 37 | 113 |
-| trendhold, low / high | 6 h | +5.4 % / +28.5 % | −1.8 % / −4.8 % | 11.9 % / 23.5 % | 56 / 32 | 101 / 131 |
+| **trendhold EMA 20/100, medium** | 6 h | **+10.2 %** | −2.9 % | 18.6 % | 35 | 137 |
+| trendhold, low / high | 6 h | +1.0 % / +27.0 % | −3.9 % / −5.0 % | 12.4 % / 24.2 % | 47 / 32 | 118 / 145 |
+| same, next fee tier (0.35 % / 0.75 %) | 6 h | +16.8 % | −1.8 % | 16.5 % | 37 | 87 |
 | trend (EMA + volume) | 6 h | −9.0 % | loss limit hit | | 16 | 47 |
 | momentum | 6 h | −7.6 % | loss limit hit | | 20 | 60 |
 | mean reversion | 6 h | −2.7 % | | 4.6 % | 12 | 36 |
@@ -59,9 +68,9 @@ The candle history is committed under `data/history/` so every number is reprodu
 
 Half-year by half-year, trend-hold 20/100 took roughly half of the market's upside and avoided more
 than half of its downside, in every window. Out-of-sample (last ten months, into the bear market) the
-medium profile tripped the brief's permanent 8 % loss limit after seven trades and stood still; the low
-profile ended +1.7 %, the high profile +9.9 %. The loss limit and the strategy need a decision from the
-owner, see the report. The three fast strategies have no measurable edge at any timeframe or fee level.
+medium profile dipped to −12 %, paused 30 days at the loss limit, resumed and ended −2.4 % against
+−13.5 % for the market. The three fast strategies have no measurable edge at any timeframe or fee level.
+The fee and loss-limit settings were decided on 16 Oct 2026; see section 7 of the report.
 
 ```bash
 python -m trader import-history
@@ -92,7 +101,7 @@ The live pilot additionally caps every profile at 10 % per position and 20 % inv
 python -m venv .venv && . .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env                                  # edit as needed
-pytest -q                                             # 44 tests
+pytest -q                                             # 50 tests
 
 python -m trader profiles                             # limits in CHF
 python -m trader fetch-history --days 730 --granularity 21600   # cache 6-hour candles (or import-history)
@@ -199,7 +208,7 @@ trader/
   gate.py          Phase A/B checks, gate_result.json
   dashboard/       FastAPI + single-page UI with emergency controls
   cli.py           python -m trader ...
-tests/             44 unit and integration tests
+tests/             50 unit and integration tests
 ```
 
 ## Known limitations

@@ -6,7 +6,7 @@ from trader.models import Candle, OrderIntent, Position, Side, Signal
 from trader.risk import ProductSpec, RiskController
 
 
-def buy(product="BTC-EUR", price=100.0, move=0.03):
+def buy(product="BTC-EUR", price=100.0, move=0.05):
     sig = Signal(product, Side.BUY, "trend", 0.8, move)
     return OrderIntent(product, Side.BUY, price, sig)
 

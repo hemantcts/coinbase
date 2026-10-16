@@ -110,14 +110,23 @@ def pilot_profile(base: RiskProfile) -> RiskProfile:
 
 @dataclass(frozen=True)
 class Costs:
-    """Trading costs the simulator and the edge filter assume."""
+    """Trading costs the simulator and the edge filter assume.
 
-    fee_rate: float = 0.006        # Coinbase taker fee at the lowest tier, verify per account
-    slippage_rate: float = 0.001   # price impact + spread assumption
+    Coinbase Advanced Trade charges less for maker orders (resting limit orders) than for
+    taker orders. Entries and planned exits are placed post-only and pay `fee_rate`;
+    urgent exits (stop-loss, flatten, last-resort fills) pay `taker_fee_rate`.
+    Defaults are the entry tier, the worst case for a small account. The live broker
+    reads the real tier from the API and never assumes a cheaper one.
+    """
+
+    fee_rate: float = 0.006         # maker
+    taker_fee_rate: float = 0.012   # taker
+    slippage_rate: float = 0.001    # price impact + spread assumption per fill
 
     @property
     def round_trip(self) -> float:
-        return 2 * (self.fee_rate + self.slippage_rate)
+        """Conservative cost of a trade: maker in, taker out (a stop-loss), slippage both ways."""
+        return self.fee_rate + self.taker_fee_rate + 2 * self.slippage_rate
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -139,6 +148,9 @@ class Settings:
     data_dir: Path = field(default_factory=lambda: Path("./data"))
     db_path: Path | None = None
     live_trading: bool = False
+    halt_reset_days: int = 30            # a total-loss halt pauses trading this long, then resumes re-based; 0 = manual restart
+    order_retries: int = 2               # live: re-price an unfilled post-only order this many times, then go marketable
+    order_timeout: int = 180             # live: seconds before an unfilled order is cancelled
     fx_fallback_rate: float | None = None    # CHF->EUR, used only if the FX API is down
     dashboard_token: str = ""
     dashboard_host: str = "127.0.0.1"
@@ -186,8 +198,12 @@ class Settings:
         s.strategy = os.getenv("STRATEGY", s.strategy).lower()
         s.costs = Costs(
             fee_rate=float(os.getenv("FEE_RATE", s.costs.fee_rate)),
+            taker_fee_rate=float(os.getenv("TAKER_FEE_RATE", s.costs.taker_fee_rate)),
             slippage_rate=float(os.getenv("SLIPPAGE_RATE", s.costs.slippage_rate)),
         )
+        s.halt_reset_days = int(os.getenv("HALT_RESET_DAYS", s.halt_reset_days))
+        s.order_retries = int(os.getenv("ORDER_RETRIES", s.order_retries))
+        s.order_timeout = int(os.getenv("ORDER_TIMEOUT", s.order_timeout))
         s.data_dir = Path(os.getenv("DATA_DIR", str(s.data_dir)))
         if os.getenv("DB_PATH"):
             s.db_path = Path(os.environ["DB_PATH"])

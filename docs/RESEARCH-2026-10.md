@@ -149,3 +149,25 @@ python -m trader backtest --strategy all --profile medium --days 730 --granulari
 python -m trader backtest --strategy trendhold --profile all --days 730 --granularity 21600 --walk-forward
 python -m trader backtest --strategy trendhold --profile medium --days 730 --granularity 21600 --fee 0.004
 ```
+
+## 7. Decisions taken on 16 October 2026
+
+The client delegated the two open settings ("do it yourself"). Configured defaults, each one line in `.env`:
+
+| setting | decision | why |
+|---|---|---|
+| fees | maker 0.6 %, taker 1.2 % (`FEE_RATE`, `TAKER_FEE_RATE`) | Coinbase's entry tier, the worst case. Entries and planned exits are post-only limit orders at the maker rate; only stop-loss and flatten pay taker. Live mode reads the real tier from the API and never assumes a cheaper one. |
+| risk profile | medium (`RISK_PROFILE`) | 25 % per coin, 60 % invested, 2 % daily and 8 % total loss limits, as in the brief. |
+| after a total-loss stop | pause 30 days, then resume with the limit re-based (`HALT_RESET_DAYS=30`) | Keeps the client's 8 % number as a circuit breaker without the bot standing still for months. Set to 0 for a manual restart. |
+
+Two-year result with these settings (maker 0.6 % in, taker 1.2 % on stops, 30-day pause):
+
+| profile | net | worst vs start | DD | trades | fees |
+|---|---|---|---|---|---|
+| low | +1.0 % | −3.9 % | 12.4 % | 47 | 118 |
+| **medium** | **+10.2 %** | −2.9 % | 18.6 % | 35 | 137 |
+| high | +27.0 % | −5.0 % | 24.2 % | 32 | 145 |
+
+Out-of-sample (last ten months), medium: −2.4 % with a −12 % dip during the bear market, a 30-day
+pause, and recovery, against −13.5 % for the market. At the next fee tier (maker 0.35 %, taker 0.75 %)
+the two-year figure is +16.8 %.
