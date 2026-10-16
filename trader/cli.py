@@ -216,6 +216,21 @@ def cmd_import_history(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_resample_history(settings: Settings, args: argparse.Namespace) -> int:
+    """Build coarser candles from cached finer ones (e.g. 1h -> 6h) for backtests."""
+    from .data import resample
+    store = Store(settings.database)
+    for product in args.products or settings.products:
+        src = store.candles(product, args.source)
+        if not src:
+            print(f"{product}: no {args.source}s candles cached")
+            continue
+        out = resample(src, args.source, args.target)
+        n = store.save_candles(product, args.target, out)
+        print(f"{product}: {len(src)} x {args.source}s -> {len(out)} x {args.target}s ({n} written)")
+    return 0
+
+
 def cmd_status(settings: Settings, args: argparse.Namespace) -> int:
     store = Store(settings.database)
     st = store.load_state()
@@ -279,6 +294,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("live", help="trade real money (gated)")
     sub.add_parser("verify-live", help="read-only check of the Coinbase API key")
     sub.add_parser("status", help="print the current account state")
+    s = sub.add_parser("resample-history", help="aggregate cached candles into a coarser timeframe")
+    s.add_argument("--source", type=int, default=3600)
+    s.add_argument("--target", type=int, default=21600)
+    s.add_argument("--products", nargs="*")
     sub.add_parser("export-history", help="write cached candles to data/history/*.csv.gz")
     sub.add_parser("import-history", help="load data/history/*.csv.gz into the candle cache")
     sub.add_parser("dashboard", help="serve the web dashboard")
@@ -292,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         "paper": cmd_paper, "live": cmd_live, "verify-live": cmd_verify_live, "status": cmd_status,
         "dashboard": cmd_dashboard, "control": cmd_control,
         "export-history": cmd_export_history, "import-history": cmd_import_history,
+        "resample-history": cmd_resample_history,
     }
     try:
         return handlers[args.command](settings, args)

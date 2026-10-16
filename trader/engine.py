@@ -149,6 +149,10 @@ class Engine:
             intent = self.risk.protective_exit(pos, last)
             if intent:
                 self._execute(intent, now, last.ts, "EXIT")
+            elif pos.trail_atr_k > 0:
+                new_stop = self.risk.trail_stop(pos, rows)
+                if new_stop is not None:
+                    self._log(now, "trail", {"product": product, "stop": round(new_stop, 2), "close": last.close})
 
         # 2. Manual flatten: close everything, then keep the STOP in place.
         if flatten and state.positions:
@@ -182,7 +186,8 @@ class Engine:
                                           "confidence": sig.confidence, "expected_move": sig.expected_move,
                                           "reason": sig.reason, "candle": last.ts, "price": last.close})
             if sig.side == Side.BUY and pos is None:
-                self._execute(OrderIntent(product, Side.BUY, last.close, sig, sig.reason), now, last.ts, "BUY")
+                self._execute(OrderIntent(product, Side.BUY, last.close, sig, sig.reason, stop_mode=self.strategy.stop_mode),
+                              now, last.ts, "BUY")
             elif sig.side == Side.SELL and pos is not None:
                 self._execute(OrderIntent(product, Side.SELL, last.close, sig, sig.reason), now, last.ts, "SELL")
             self.store.mark_processed(product, last.ts)
@@ -230,7 +235,8 @@ class Engine:
         state = self.state
         assert state is not None
         if order.status == OrderStatus.FILLED:
-            pnl = apply_fill(state, order, decision)
+            trail = self.risk.profile.atr_multiple if (decision is not None and decision.take_profit_price == 0 and order.side == Side.BUY) else 0.0
+            pnl = apply_fill(state, order, decision, trail_atr_k=trail, atr_window=self.strategy.atr_window)
             self.store.save_order(order, pnl)
             detail = {"product": order.product, "side": order.side.value, "qty": order.filled_qty,
                       "price": order.avg_fill_price, "fee": order.fee, "pnl": pnl, "strategy": order.strategy,

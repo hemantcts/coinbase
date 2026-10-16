@@ -14,6 +14,8 @@ from ..models import Candle, Position, Signal
 class Strategy(ABC):
     name: str = "base"
     warmup: int = 50          # candles needed before the strategy may speak
+    stop_mode: str = "pct"    # "pct": fixed stop and target from the profile; "atr": trailing k*ATR stop, no target
+    atr_window: int = 14
 
     @abstractmethod
     def evaluate(self, product: str, candles: list[Candle], position: Position | None) -> Signal:

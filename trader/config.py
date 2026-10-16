@@ -24,9 +24,11 @@ class RiskProfile:
     daily_loss_fraction: float
     total_loss_fraction: float
     max_new_positions_per_day: int
-    # Protective exits
+    # Protective exits. Strategies with stop_mode "pct" use the fixed percentages,
+    # strategies with stop_mode "atr" use a trailing stop of atr_multiple * ATR.
     stop_loss_pct: float
     take_profit_pct: float
+    atr_multiple: float
     # A signal is tradeable only if expected move >= round-trip cost * this
     min_edge_multiple: float
     # Minimum order notional in quote currency
@@ -59,6 +61,7 @@ PROFILES: dict[str, RiskProfile] = {
         max_new_positions_per_day=2,
         stop_loss_pct=0.015,
         take_profit_pct=0.03,
+        atr_multiple=4.0,
         min_edge_multiple=2.0,
     ),
     "medium": RiskProfile(
@@ -72,6 +75,7 @@ PROFILES: dict[str, RiskProfile] = {
         max_new_positions_per_day=4,
         stop_loss_pct=0.02,
         take_profit_pct=0.04,
+        atr_multiple=6.0,
         min_edge_multiple=1.5,
     ),
     "high": RiskProfile(
@@ -85,6 +89,7 @@ PROFILES: dict[str, RiskProfile] = {
         max_new_positions_per_day=6,
         stop_loss_pct=0.03,
         take_profit_pct=0.06,
+        atr_multiple=8.0,
         min_edge_multiple=1.2,
     ),
 }
@@ -125,11 +130,11 @@ class Settings:
     quote_currency: str = "EUR"          # what the pairs settle in
     report_currency: str = "CHF"         # what the owner thinks in
     starting_capital_report: float = 1000.0  # in report currency
-    granularity: int = 300               # seconds per candle
-    poll_seconds: int = 300
+    granularity: int = 21600             # seconds per candle (6h: the only timeframe that survived fees in testing)
+    poll_seconds: int = 300              # how often to look for a newly closed candle
     history_candles: int = 300
     risk_profile: str = "medium"
-    strategy: str = "ensemble"
+    strategy: str = "trendhold"
     costs: Costs = field(default_factory=Costs)
     data_dir: Path = field(default_factory=lambda: Path("./data"))
     db_path: Path | None = None

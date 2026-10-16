@@ -113,6 +113,24 @@ class CoinbasePublic:
         return total
 
 
+def resample(candles: list[Candle], src_granularity: int, dst_granularity: int) -> list[Candle]:
+    """Aggregate candles into a coarser timeframe aligned to UTC. Buckets with gaps are dropped."""
+    if dst_granularity % src_granularity != 0 or dst_granularity <= src_granularity:
+        raise ValueError("destination granularity must be a multiple of the source")
+    factor = dst_granularity // src_granularity
+    buckets: dict[int, list[Candle]] = {}
+    for c in candles:
+        buckets.setdefault(c.ts - c.ts % dst_granularity, []).append(c)
+    out = []
+    for ts in sorted(buckets):
+        chunk = sorted(buckets[ts], key=lambda c: c.ts)
+        if len(chunk) != factor:
+            continue
+        out.append(Candle(ts, chunk[0].open, max(c.high for c in chunk), min(c.low for c in chunk), chunk[-1].close,
+                          sum(c.volume for c in chunk)))
+    return out
+
+
 class StoreDataSource:
     """Serves cached candles for backtests. Never returns a candle that closes after `now`."""
 

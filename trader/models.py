@@ -45,6 +45,7 @@ class Signal:
     confidence: float = 0.0       # 0..1, how strong the setup is
     expected_move: float = 0.0    # strategy's estimate of the favourable move, as a fraction
     reason: str = ""
+    atr: float = 0.0              # current ATR in price units, for volatility-based stops
 
     @staticmethod
     def hold(product: str, strategy: str, reason: str = "") -> "Signal":
@@ -61,6 +62,8 @@ class Position:
     stop_price: float
     take_profit_price: float
     entry_fee: float = 0.0
+    trail_atr_k: float = 0.0      # >0: stop trails at close - k*ATR
+    atr_window: int = 14
 
     def value(self, price: float) -> float:
         return self.qty * price
@@ -82,6 +85,7 @@ class OrderIntent:
     signal: Signal
     reason: str = ""
     qty: float | None = None      # for sells: how much to close (None = all)
+    stop_mode: str = "pct"        # copied from the strategy: "pct" or "atr"
 
 
 @dataclass

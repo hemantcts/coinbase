@@ -134,23 +134,45 @@ class RiskController:
                 return Decision(False, f"quantity {qty} below exchange minimum {spec.base_min_size}")
             if spec.min_market_funds and qty * intent.price < spec.min_market_funds:
                 return Decision(False, f"notional below exchange minimum funds {spec.min_market_funds}")
-        stop = intent.price * (1 - p.stop_loss_pct)
-        take = intent.price * (1 + p.take_profit_pct)
+        if self._atr_mode(intent) and intent.signal.atr > 0:
+            stop = intent.price - p.atr_multiple * intent.signal.atr
+            take = 0.0                                   # no target: the trend decides the exit
+        else:
+            stop = intent.price * (1 - p.stop_loss_pct)
+            take = intent.price * (1 + p.take_profit_pct)
         if spec:
             stop, take = spec.round_price(stop), spec.round_price(take)
         return Decision(True, "approved", qty=qty, notional=qty * fill_estimate * (1 + c.fee_rate),
-                        stop_price=stop, take_profit_price=take)
+                        stop_price=max(stop, 0.0), take_profit_price=max(take, 0.0))
+
+    @staticmethod
+    def _atr_mode(intent: OrderIntent) -> bool:
+        return getattr(intent, "stop_mode", "pct") == "atr"
 
     # ---- protective exits ----------------------------------------------------
 
     def protective_exit(self, position: Position, candle: Candle) -> OrderIntent | None:
-        """Stop-loss / take-profit check against the latest closed candle."""
+        """Stop-loss / take-profit check against the latest closed candle. A zero level means 'none'."""
         if position.qty <= 0:
             return None
-        if candle.low <= position.stop_price:
+        if position.stop_price > 0 and candle.low <= position.stop_price:
             sig = Signal(position.product, Side.SELL, "risk", 1.0, 0.0, f"stop-loss {position.stop_price:.2f} hit (low {candle.low:.2f})")
             return OrderIntent(position.product, Side.SELL, position.stop_price, sig, sig.reason)
-        if candle.high >= position.take_profit_price:
+        if position.take_profit_price > 0 and candle.high >= position.take_profit_price:
             sig = Signal(position.product, Side.SELL, "risk", 1.0, 0.0, f"take-profit {position.take_profit_price:.2f} hit (high {candle.high:.2f})")
             return OrderIntent(position.product, Side.SELL, position.take_profit_price, sig, sig.reason)
+        return None
+
+    def trail_stop(self, position: Position, candles: list[Candle]) -> float | None:
+        """Raise a trailing ATR stop after a closed candle. Never lowers it. Returns the new stop or None."""
+        if position.qty <= 0 or position.trail_atr_k <= 0 or len(candles) < position.atr_window + 1:
+            return None
+        from . import indicators as ind
+        atr = ind.atr([c.high for c in candles], [c.low for c in candles], [c.close for c in candles], position.atr_window)
+        if not atr:
+            return None
+        candidate = candles[-1].close - position.trail_atr_k * atr
+        if candidate > position.stop_price:
+            position.stop_price = candidate
+            return candidate
         return None

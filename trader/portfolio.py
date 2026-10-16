@@ -4,7 +4,8 @@ from __future__ import annotations
 from .models import Decision, Order, OrderStatus, PortfolioState, Position, Side
 
 
-def apply_fill(state: PortfolioState, order: Order, decision: Decision | None = None) -> float:
+def apply_fill(state: PortfolioState, order: Order, decision: Decision | None = None,
+               trail_atr_k: float = 0.0, atr_window: int = 14) -> float:
     """Update cash, positions and P&L for a filled order. Returns realised P&L of the fill."""
     if order.status not in (OrderStatus.FILLED, OrderStatus.PARTIAL) or order.filled_qty <= 0:
         return 0.0
@@ -27,6 +28,8 @@ def apply_fill(state: PortfolioState, order: Order, decision: Decision | None = 
                 stop_price=decision.stop_price if decision else order.stop_price,
                 take_profit_price=decision.take_profit_price if decision else order.take_profit_price,
                 entry_fee=fee,
+                trail_atr_k=trail_atr_k,
+                atr_window=atr_window,
             )
             state.new_positions_today += 1
         return 0.0
