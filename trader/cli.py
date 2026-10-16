@@ -45,7 +45,13 @@ def cmd_profiles(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _apply_granularity(settings: Settings, args: argparse.Namespace) -> None:
+    if getattr(args, "granularity", None):
+        settings.granularity = args.granularity
+
+
 def cmd_fetch_history(settings: Settings, args: argparse.Namespace) -> int:
+    _apply_granularity(settings, args)
     store = Store(settings.database)
     public = CoinbasePublic(settings.granularity, store=store)
     for product in args.products or settings.products:
@@ -58,13 +64,15 @@ def cmd_fetch_history(settings: Settings, args: argparse.Namespace) -> int:
 
 
 def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
+    _apply_granularity(settings, args)
     store = Store(settings.database)
     start, end = _period(args)
     strategies = list(ALL) + ["ensemble"] if args.strategy == "all" else [args.strategy]
     profiles = list(PROFILES) if args.profile == "all" else [args.profile]
     kw = dict(capital=args.capital or settings.starting_capital_report, costs=settings.costs, granularity=settings.granularity)
     products = args.products or settings.products
-    print(f"Backtest {products} {start:%Y-%m-%d} .. {end:%Y-%m-%d}, fees {settings.costs.fee_rate:.2%}, slippage {settings.costs.slippage_rate:.2%}")
+    print(f"Backtest {products} {start:%Y-%m-%d} .. {end:%Y-%m-%d}, {settings.granularity}s candles, "
+          f"fees {settings.costs.fee_rate:.2%}, slippage {settings.costs.slippage_rate:.2%}")
     if args.walk_forward:
         rows, out = [], {}
         for s in strategies:
@@ -164,6 +172,50 @@ def cmd_gate(settings: Settings, args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_export_history(settings: Settings, args: argparse.Namespace) -> int:
+    """Write cached candles to data/history/*.csv.gz so they can be committed and shared."""
+    import csv
+    import gzip
+    store = Store(settings.database)
+    out_dir = settings.data_dir / "history"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = store.db.execute("SELECT DISTINCT product, granularity FROM candles ORDER BY product, granularity").fetchall()
+    for r in rows:
+        product, g = r["product"], r["granularity"]
+        path = out_dir / f"{product}_{g}.csv.gz"
+        candles = store.candles(product, g)
+        with gzip.open(path, "wt", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["ts", "open", "high", "low", "close", "volume"])
+            for c in candles:
+                w.writerow([c.ts, c.open, c.high, c.low, c.close, c.volume])
+        print(f"{path}: {len(candles)} candles")
+    if not rows:
+        print("no cached candles; run fetch-history first")
+    return 0
+
+
+def cmd_import_history(settings: Settings, args: argparse.Namespace) -> int:
+    """Load data/history/*.csv.gz into the candle cache (idempotent)."""
+    import csv
+    import gzip
+    from .models import Candle
+    store = Store(settings.database)
+    src = settings.data_dir / "history"
+    files = sorted(src.glob("*.csv.gz"))
+    if not files:
+        print(f"no files in {src}")
+        return 1
+    for path in files:
+        product, g = path.name[:-len(".csv.gz")].rsplit("_", 1)
+        with gzip.open(path, "rt", newline="", encoding="utf-8") as f:
+            rows = [Candle(int(r["ts"]), float(r["open"]), float(r["high"]), float(r["low"]), float(r["close"]), float(r["volume"]))
+                    for r in csv.DictReader(f)]
+        n = store.save_candles(product, int(g), rows)
+        print(f"{product} {g}s: {n} candles imported")
+    return 0
+
+
 def cmd_status(settings: Settings, args: argparse.Namespace) -> int:
     store = Store(settings.database)
     st = store.load_state()
@@ -210,7 +262,9 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("fetch-history", help="cache historical candles for backtests")
     s.add_argument("--days", type=int, default=120)
     s.add_argument("--products", nargs="*")
+    s.add_argument("--granularity", type=int, choices=[60, 300, 900, 3600, 21600, 86400])
     s = sub.add_parser("backtest", help="simulate strategies on cached candles")
+    s.add_argument("--granularity", type=int, choices=[60, 300, 900, 3600, 21600, 86400])
     s.add_argument("--strategy", default="all", choices=list(ALL) + ["ensemble", "all"])
     s.add_argument("--profile", default="medium", choices=list(PROFILES) + ["all"])
     s.add_argument("--start"); s.add_argument("--end"); s.add_argument("--days", type=int)
@@ -225,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("live", help="trade real money (gated)")
     sub.add_parser("verify-live", help="read-only check of the Coinbase API key")
     sub.add_parser("status", help="print the current account state")
+    sub.add_parser("export-history", help="write cached candles to data/history/*.csv.gz")
+    sub.add_parser("import-history", help="load data/history/*.csv.gz into the candle cache")
     sub.add_parser("dashboard", help="serve the web dashboard")
     s = sub.add_parser("control", help="emergency controls")
     s.add_argument("action", choices=["stop", "resume", "flatten", "disarm"])
@@ -235,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         "profiles": cmd_profiles, "fetch-history": cmd_fetch_history, "backtest": cmd_backtest, "gate": cmd_gate,
         "paper": cmd_paper, "live": cmd_live, "verify-live": cmd_verify_live, "status": cmd_status,
         "dashboard": cmd_dashboard, "control": cmd_control,
+        "export-history": cmd_export_history, "import-history": cmd_import_history,
     }
     try:
         return handlers[args.command](settings, args)
