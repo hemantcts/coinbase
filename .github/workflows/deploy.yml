@@ -25,7 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      APP_DIR: /opt/coinbase-trader
+      # Where the code lives on the server. Override with a repository variable APP_DIR if it moves.
+      APP_DIR: ${{ vars.APP_DIR || '/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +47,7 @@ jobs:
           SSH_USER: ${{ secrets.VPS_USER }}
           SSH_PORT: ${{ secrets.VPS_PORT }}
         run: |
-          rsync -az --delete \
+          rsync -rlptz --delete --no-owner --no-group \
             --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude '.pytest_cache' \
             --exclude 'data/' --exclude '.env' \
             --rsync-path='sudo rsync' \

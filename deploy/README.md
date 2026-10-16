@@ -1,6 +1,6 @@
 # Deploying to the VPS
 
-Every push to `main` runs the tests and, if they pass, copies the code to the server over SSH
+Every push to `main` runs the tests and, if they pass, copies the code to `/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch` on the server over SSH
 and runs `deploy/server-setup.sh` there. Nothing on the server needs GitHub access, and the
 server's `.env` and `data/` directory are never overwritten.
 
@@ -51,22 +51,37 @@ containers running and the first trader log lines. From then on every push to `m
 
 ## The dashboard on https://coinbase.loewenmut.ch
 
-The dashboard listens only on `127.0.0.1:8080` on the server. CloudPanel puts it on the domain:
+The dashboard listens only on `127.0.0.1:8080` on the server. The site already exists in
+CloudPanel, so point its nginx at the dashboard instead of at files:
 
-1. CloudPanel → Sites → Add Site → **Create a Reverse Proxy**.
-   Domain `coinbase.loewenmut.ch`, Reverse Proxy URL `http://127.0.0.1:8080`.
-2. Site → SSL/TLS → Actions → New Let's Encrypt Certificate.
-3. Site → Security → Basic Auth (if your CloudPanel version has it): add a user. This keeps the
+1. CloudPanel → Sites → `coinbase.loewenmut.ch` → **Vhost**. Replace the `location / { ... }`
+   block (keep everything else, in particular the SSL lines CloudPanel manages) with:
+
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:8080;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_read_timeout 60s;
+   }
+   ```
+
+   Save; CloudPanel reloads nginx.
+2. Site → SSL/TLS → Actions → New Let's Encrypt Certificate (if not already issued).
+3. Site → Security → Basic Auth, if your CloudPanel version has it: add a user. This keeps the
    page itself private. The data and the STOP / FLATTEN buttons are additionally protected by
-   `DASHBOARD_TOKEN`, which is in `/opt/coinbase-trader/.env` on the server:
-   `sudo grep DASHBOARD_TOKEN /opt/coinbase-trader/.env`.
+   `DASHBOARD_TOKEN`, found with
+   `sudo grep DASHBOARD_TOKEN /home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`.
 
-If the domain was created as a plain PHP/static site, delete that site first; two sites cannot share a domain.
+Alternatively delete the site and recreate it as type **Reverse Proxy** with URL `http://127.0.0.1:8080`.
 
 ## Day to day, on the server
 
 ```
-cd /opt/coinbase-trader
+cd /home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch
 sudo docker compose logs -f trader
 sudo docker compose exec trader python -m trader status
 sudo docker compose exec trader python -m trader control stop      # no new buys
