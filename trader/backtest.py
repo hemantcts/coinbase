@@ -33,6 +33,7 @@ class BacktestResult:
     initial: float
     final: float
     net_return: float               # fraction
+    benchmark_return: float         # buy & hold at the profile's max exposure, split equally across products
     max_drawdown: float             # fraction, peak to trough
     max_loss_from_start: float      # fraction, lowest equity vs starting capital (what the total-loss halt watches)
     round_trips: int
@@ -62,8 +63,8 @@ class BacktestResult:
     def summary_row(self) -> dict[str, Any]:
         return {
             "strategy": self.strategy, "profile": self.profile, "days": round(self.days, 1),
-            "net_%": round(100 * self.net_return, 2), "maxDD_%": round(100 * self.max_drawdown, 2),
-            "worst_%": round(-100 * self.max_loss_from_start, 2),
+            "net_%": round(100 * self.net_return, 2), "b&h_%": round(100 * self.benchmark_return, 2),
+            "maxDD_%": round(100 * self.max_drawdown, 2), "worst_%": round(-100 * self.max_loss_from_start, 2),
             "trades": self.round_trips, "win_%": round(100 * self.win_rate, 1), "PF": round(self.profit_factor, 2),
             "fees": round(self.fees, 2), "fee_drag_%": round(100 * self.fee_drag, 2), "sharpe": round(self.sharpe, 2),
             "exposure_%": round(100 * self.exposure_pct, 1), "stops": self.stop_outs, "tps": self.take_profits,
@@ -117,11 +118,17 @@ def run_backtest(candle_store: Store, products: list[str], strategy: str, profil
             exposed += 1
 
     fills = result_store.fills(limit=100000)
-    return _metrics(engine, result_store, fills, curve, exposed, strategy, prof.name, products, timeline, capital)
+    benchmark = 0.0
+    for p in products:
+        rows = candle_store.candles(p, granularity, timeline[0] - granularity, timeline[-1])
+        if len(rows) > 1 and rows[0].close > 0:
+            benchmark += (prof.max_exposure_fraction / len(products)) * (rows[-1].close / rows[0].close - 1)
+    return _metrics(engine, result_store, fills, curve, exposed, strategy, prof.name, products, timeline, capital, benchmark)
 
 
 def _metrics(engine: Engine, store: Store, fills: list[dict[str, Any]], curve: list[tuple[int, float]], exposed: int,
-             strategy: str, profile: str, products: list[str], timeline: list[int], capital: float) -> BacktestResult:
+             strategy: str, profile: str, products: list[str], timeline: list[int], capital: float,
+             benchmark: float = 0.0) -> BacktestResult:
     state = engine.state
     assert state is not None
     final = state.equity()
@@ -163,6 +170,7 @@ def _metrics(engine: Engine, store: Store, fills: list[dict[str, Any]], curve: l
         start=datetime.fromtimestamp(timeline[0], tz=timezone.utc).isoformat(timespec="minutes"),
         end=datetime.fromtimestamp(timeline[-1], tz=timezone.utc).isoformat(timespec="minutes"),
         days=days, cycles=len(curve), initial=capital, final=final, net_return=final / capital - 1 if capital else 0.0,
+        benchmark_return=benchmark,
         max_drawdown=max_dd, max_loss_from_start=(1 - lowest / capital) if capital else 0.0, round_trips=len(sells), buys=len(buys), sells=len(sells),
         win_rate=len(wins) / len(pnls) if pnls else 0.0, profit_factor=pf if pf != math.inf else 99.0,
         gross_profit=gross_profit, gross_loss=gross_loss, fees=fees, fee_drag=fees / capital if capital else 0.0,

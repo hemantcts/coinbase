@@ -179,6 +179,7 @@ def cmd_verify_live(settings: Settings, args: argparse.Namespace) -> int:
 
 
 def cmd_gate(settings: Settings, args: argparse.Namespace) -> int:
+    _apply_granularity(settings, args)
     store = Store(settings.database)
     start, end = _period(args)
     result = run_gate(settings, store, store, start, end, min_paper_hours=args.min_paper_hours)
@@ -310,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="pause after a total-loss halt in days (default: HALT_RESET_DAYS from .env; 0 = never resume)")
     s.add_argument("--json"); s.add_argument("--curves", action="store_true", help="include equity curves in --json")
     s = sub.add_parser("gate", help="run the automatic release checks")
+    s.add_argument("--granularity", type=int, choices=[60, 300, 900, 3600, 21600, 86400])
     s.add_argument("--start"); s.add_argument("--end"); s.add_argument("--days", type=int)
     s.add_argument("--min-paper-hours", type=float, default=72.0)
     sub.add_parser("paper", help="paper trade on live market data")

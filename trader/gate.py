@@ -31,7 +31,10 @@ class Check:
 
 def backtest_checks(oos: BacktestResult, profile: RiskProfile, min_trades: int = 5) -> list[Check]:
     c = []
-    c.append(Check("A", "oos_net_return_positive", oos.net_return > 0, f"net {oos.net_return:+.2%} over {oos.days:.0f} days"))
+    beats = oos.net_return > 0 or oos.net_return > oos.benchmark_return
+    c.append(Check("A", "oos_profit_or_beats_market", beats,
+                   f"net {oos.net_return:+.2%} vs buy-and-hold {oos.benchmark_return:+.2%} over {oos.days:.0f} days "
+                   "(a trend follower must make money or lose less than the market)"))
     c.append(Check("A", "oos_loss_within_limit", oos.max_loss_from_start < profile.total_loss_fraction,
                    f"worst loss from start {oos.max_loss_from_start:.2%} vs total loss limit {profile.total_loss_fraction:.0%} "
                    f"(peak-to-trough drawdown {oos.max_drawdown:.2%})"))

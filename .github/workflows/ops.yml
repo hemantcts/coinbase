@@ -22,7 +22,7 @@ on:
           - backtest      # two-year backtest of the configured strategy and profile
 
 concurrency:
-  group: deploy
+  group: ops
   cancel-in-progress: false
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
         run: |
           case "$ACTION" in
             status)     CMD="docker compose exec -T trader python -m trader status" ;;
-            gate)       CMD="docker compose exec -T trader python -m trader gate --days 730 --granularity 21600 || true" ;;
+            gate)       CMD="docker compose exec -T trader python -m trader gate --days 730 || true" ;;
             logs)       CMD="docker compose logs --tail 150 --no-color trader" ;;
             events)     CMD="docker compose exec -T trader python -c \"from trader.store import Store; from trader.config import Settings; s=Settings.from_env(); [print(e['ts'], e['kind'], e['detail'][:200]) for e in reversed(Store(s.database).events(40))]\"" ;;
             containers) CMD="docker compose ps && docker stats --no-stream" ;;

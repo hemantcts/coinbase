@@ -49,7 +49,7 @@ jobs:
         run: |
           rsync -rlptz --delete --no-owner --no-group \
             --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude '.pytest_cache' \
-            --exclude 'data/' --exclude '.env' \
+            --include 'data/' --include 'data/history/' --include 'data/history/***' --exclude 'data/*' --exclude '.env' \
             --rsync-path='sudo rsync' \
             -e "ssh -i ~/.ssh/deploy_key -p ${SSH_PORT:-22} -o StrictHostKeyChecking=yes" \
             ./ "$SSH_USER@$SSH_HOST:$APP_DIR/"

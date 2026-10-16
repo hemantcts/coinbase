@@ -37,7 +37,7 @@ else
   echo "    .env kept"
 fi
 grep -q '^LIVE_TRADING=true' .env && { echo "REFUSING: LIVE_TRADING=true in .env on an automated deploy"; exit 1; }
-mkdir -p data
+mkdir -p data data/history
 chown -R 10001:10001 data
 chmod 700 data
 
@@ -45,5 +45,7 @@ echo "==> start / restart containers"
 docker compose up -d --build --remove-orphans 2>&1 | grep -v "^$" | tail -5
 sleep 8
 docker compose ps
+echo "==> import committed candle history for backtests and the gate"
+docker compose exec -T trader python -m trader import-history || echo "    (import skipped)"
 echo "==> last trader log lines"
 docker compose logs --tail 8 trader
