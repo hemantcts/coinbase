@@ -62,11 +62,8 @@ jobs:
           VALUE: ${{ inputs.value }}
         run: |
           case "$ACTION" in
-            set-env)
-              case "$KEY" in RISK_PROFILE|STRATEGY|HALT_RESET_DAYS|FEE_RATE|TAKER_FEE_RATE|PRODUCTS|NOTIFY_WEBHOOK|MAX_DATA_AGE) ;; *) echo "key '$KEY' is not allowed"; exit 1 ;; esac
-              [ -n "$VALUE" ] || { echo "value required"; exit 1; }
-              CMD="grep -q '^$KEY=' .env && sed -i 's|^$KEY=.*|$KEY=$VALUE|' .env || echo '$KEY=$VALUE' >> .env; grep '^$KEY=' .env; docker compose restart trader dashboard && sleep 8 && docker compose logs --tail 6 --no-color trader" ;;
-            show-env)   CMD="sed -E 's/^(DASHBOARD_TOKEN|COINBASE_API_KEY|COINBASE_API_SECRET|NOTIFY_WEBHOOK)=.+/\\1=***/' .env" ;;
+            set-env)    CMD="bash deploy/set-env.sh $KEY $VALUE" ;;
+            show-env)   CMD="sed -E s/^\(DASHBOARD_TOKEN\|COINBASE_API_KEY\|COINBASE_API_SECRET\|NOTIFY_WEBHOOK\)=.+/\\1=***/ .env" ;;
             status)     CMD="docker compose exec -T trader python -m trader status" ;;
             gate)       CMD="docker compose exec -T trader python -m trader gate --days 730 || true" ;;
             logs)       CMD="docker compose logs --tail 150 --no-color trader" ;;
