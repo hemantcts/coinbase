@@ -146,6 +146,17 @@ class Engine:
         if not candles:
             raise RuntimeError("no market data for any product this cycle")
 
+        # Data age: a candle that should have closed long ago means the feed is stuck. No new buys then.
+        max_age = s.max_data_age or 2 * s.granularity
+        ages = {p: now.timestamp() - (rows[-1].ts + s.granularity) for p, rows in candles.items()}
+        stale = {p: a for p, a in ages.items() if a > max_age}
+        if self.mode != "backtest":
+            if stale and not self.risk.stale_data:
+                self._log(now, "stale_data", {p: int(a) for p, a in stale.items()})
+                self.notifier.send("Market data stale", ", ".join(f"{p}: {int(a / 60)} min old" for p, a in stale.items()), "warning")
+            self.risk.stale_data = bool(stale)
+            self.store.set_meta("data_age_seconds", str(int(max(ages.values())) if ages else -1))
+
         if self.risk.roll_day(state, now):
             self._log(now, "day_start", {"day": state.day, "equity": state.day_start_equity})
         for reason in self.risk.update_halts(state):

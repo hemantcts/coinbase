@@ -94,6 +94,23 @@ PROFILES: dict[str, RiskProfile] = {
     ),
 }
 
+# The client's preliminary limits from the plan of 16 Oct 2026: 10 % per position, 30 % invested,
+# 2 % daily, 8 % portfolio stop. To be confirmed before real money; paper trading tests them.
+PROFILES["client"] = RiskProfile(
+    name="client",
+    max_position_fraction=0.10,
+    max_exposure_fraction=0.30,
+    min_reserve_fraction=0.70,
+    risk_per_trade_fraction=0.0025,
+    daily_loss_fraction=0.02,
+    total_loss_fraction=0.08,
+    max_new_positions_per_day=3,
+    stop_loss_pct=0.02,
+    take_profit_pct=0.04,
+    atr_multiple=6.0,
+    min_edge_multiple=1.5,
+)
+
 # Phase C pilot: real money, but capped at CHF 100 per position and CHF 200 total
 # on a CHF 1'000 account, until the first live results are reviewed.
 PILOT_CAPS = {"max_position_fraction": 0.10, "max_exposure_fraction": 0.20}
@@ -142,8 +159,9 @@ class Settings:
     granularity: int = 21600             # seconds per candle (6h: the only timeframe that survived fees in testing)
     poll_seconds: int = 300              # how often to look for a newly closed candle
     history_candles: int = 300
-    risk_profile: str = "medium"
+    risk_profile: str = "client"
     strategy: str = "trendhold"
+    max_data_age: int = 0                # seconds; 0 = 2 candles. Older market data blocks new buys.
     costs: Costs = field(default_factory=Costs)
     data_dir: Path = field(default_factory=lambda: Path("./data"))
     db_path: Path | None = None
@@ -202,6 +220,7 @@ class Settings:
             slippage_rate=float(os.getenv("SLIPPAGE_RATE", s.costs.slippage_rate)),
         )
         s.halt_reset_days = int(os.getenv("HALT_RESET_DAYS", s.halt_reset_days))
+        s.max_data_age = int(os.getenv("MAX_DATA_AGE", s.max_data_age))
         s.order_retries = int(os.getenv("ORDER_RETRIES", s.order_retries))
         s.order_timeout = int(os.getenv("ORDER_TIMEOUT", s.order_timeout))
         s.data_dir = Path(os.getenv("DATA_DIR", str(s.data_dir)))

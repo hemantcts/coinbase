@@ -41,6 +41,17 @@ mkdir -p data data/history
 chown -R 10001:10001 data
 chmod 700 data
 
+echo "==> daily database backup (14 days kept)"
+cat > /etc/cron.daily/coinbase-trader-backup <<CRON
+#!/bin/sh
+# Copy the trader database with sqlite's own backup so a running writer is safe; keep 14 days.
+mkdir -p "$APP_DIR/data/backups"
+docker compose -f "$APP_DIR/compose.yaml" --project-directory "$APP_DIR" exec -T trader \
+  python -c "import sqlite3,datetime; s=sqlite3.connect('/data/trader.sqlite3'); d=sqlite3.connect('/data/backups/trader-%s.sqlite3' % datetime.date.today().isoformat()); s.backup(d); d.close()" 2>/dev/null
+find "$APP_DIR/data/backups" -name 'trader-*.sqlite3' -mtime +14 -delete
+CRON
+chmod 755 /etc/cron.daily/coinbase-trader-backup
+
 echo "==> start / restart containers"
 docker compose up -d --build --remove-orphans 2>&1 | grep -v "^$" | tail -5
 sleep 8

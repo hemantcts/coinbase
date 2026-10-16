@@ -49,6 +49,16 @@ def create_app(settings: Settings) -> FastAPI:
         if last_cycle:
             stale = now - datetime.fromisoformat(last_cycle) > timedelta(seconds=3 * settings.poll_seconds)
         gate_ok, gate_msg = gate_status(settings, now)
+        snaps = store.snapshots(limit=20000)
+        peak, max_dd, lowest = 0.0, 0.0, None
+        for row in snaps:
+            eq = row["equity"]
+            peak = max(peak, eq)
+            lowest = eq if lowest is None else min(lowest, eq)
+            if peak > 0:
+                max_dd = max(max_dd, 1 - eq / peak)
+        data_age = int(store.get_meta("data_age_seconds", "-1") or -1)
+        max_age = settings.max_data_age or 2 * settings.granularity
         d: dict[str, Any] = {
             "now": now.isoformat(timespec="seconds"),
             "mode": store.get_meta("mode", "paper"),
@@ -59,6 +69,16 @@ def create_app(settings: Settings) -> FastAPI:
             "report_currency": settings.report_currency,
             "starting_capital_report": settings.starting_capital_report,
             "started_at": store.get_meta("started_at"),
+            "performance": {
+                "net_return": (st.equity() / st.initial_capital - 1) if st and st.initial_capital else 0.0,
+                "max_drawdown": max_dd,
+                "lowest_equity": lowest,
+                "cycles": len(snaps),
+            },
+            "data_quality": {
+                "age_seconds": data_age, "max_age_seconds": max_age,
+                "ok": 0 <= data_age <= max_age,
+            },
             "health": {
                 "last_cycle_at": last_cycle, "stale": stale,
                 "consecutive_errors": int(store.get_meta("consecutive_errors", "0") or 0),

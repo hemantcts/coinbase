@@ -22,15 +22,17 @@ Live: https://coinbase.loewenmut.ch on the client's Lightsail VPS (Ubuntu, Cloud
 | 5 Full CHF 1 000 | after a clean pilot |
 
 Configured decisions (all in `.env`, see `.env.example`): strategy `trendhold` (EMA 20/100 on 6-hour
-candles, 6×ATR trailing stop), profile `medium`, fees assumed maker 0.6 % / taker 1.2 %,
-total-loss halt pauses 30 days (`HALT_RESET_DAYS=30`).
+candles, 6×ATR trailing stop), profile `client` (the client's limits of 16 Oct: 10 % / 30 % / 2 % / 8 %),
+fees assumed maker 0.6 % / taker 1.2 %, total-loss halt pauses 30 days (`HALT_RESET_DAYS=30`).
+The client's plan numbers phases 0.3 … 1.0; `CHANGELOG.md` maps our versions onto it.
 
 ## 3. Daily work, no SSH needed
 
 - **Deploy**: push to `main`. GitHub Actions runs the tests, copies the code to the server and restarts
   the containers. A failed test blocks the deploy. The server's `.env` and `data/` are never overwritten.
 - **Operate**: GitHub → Actions → "Server command" → Run workflow → pick `status`, `logs`, `events`,
-  `gate`, `backtest`, `containers`, `restart`, `stop`, `resume`, `flatten`. Output is in the job log.
+  `gate`, `backtest`, `containers`, `restart`, `stop`, `resume`, `flatten`, `show-env`, or `set-env`
+  with a key and value (whitelisted keys only, never LIVE_TRADING). Output is in the job log.
 - **Watch**: the dashboard. Token is `DASHBOARD_TOKEN` in the server's `.env`
   (`/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`). One-time link: `https://coinbase.loewenmut.ch/?token=...`.
 - **Secrets** live in GitHub → Settings → Secrets: `VPS_HOST`, `VPS_USER` (`ubuntu`), `VPS_PORT`, `VPS_SSH_KEY`.

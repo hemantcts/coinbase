@@ -183,6 +183,7 @@ const I18N = {
     eq_rep: c => `Kapital (${c})`, eq_quote: c => `Kapital (${c})`, pnl: "Gewinn / Verlust", cash: "Barbestand", invested: "Investiert",
     since_start: "seit Start", of_equity: "des Kapitals", positions_n: n => `${n} Position${n === 1 ? "" : "en"}`,
     realised: "Realisiert", fees: "Gebühren bezahlt", daystart: "Tagesanfang", newtoday: "Neue Positionen heute", halts: "Sperren", none: "keine",
+    netreturn: "Nettorendite", maxdd: "Max. Rückgang", dataq: "Datenqualität", data_ok: "aktuell", data_stale: "VERALTET", data_age: a => `Kurse ${a} min alt`,
     halt_total: "GESAMTVERLUST", halt_daily: "TAGESVERLUST", startcap: "Startkapital", started: "Start",
     fxnote: (rep, q, r, t) => `1 ${rep} = ${r} ${q}, Kurs vom ${t}`,
     noposition: "Keine offene Position. Das Kapital liegt in Bar, bis ein Aufwärtstrend bestätigt ist.",
@@ -192,7 +193,7 @@ const I18N = {
     th: { product: "Markt", qty: "Menge", entry: "Einstieg", last: "Aktuell", upnl: "Unreal. G/V", stop: "Stop", target: "Ziel", strategy: "Strategie",
           time: "Zeit", side: "Seite", price: "Preis", fee: "Gebühr", pnl: "G/V", status: "Status", reason: "Grund", kind: "Art", detail: "Details", limit: "Limite" },
     limits_k: { max_position: "Max. pro Position", max_exposure: "Max. investiert", min_reserve: "Mindestreserve", risk_per_trade: "Risiko pro Trade", daily_loss_limit: "Tagesverlustgrenze", total_loss_limit: "Gesamtverlustgrenze" },
-    kinds: { start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft" },
+    kinds: { start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet" },
     status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
     empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
     done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
@@ -211,6 +212,7 @@ const I18N = {
     eq_rep: c => `Equity (${c})`, eq_quote: c => `Equity (${c})`, pnl: "Profit / loss", cash: "Cash", invested: "Invested",
     since_start: "since start", of_equity: "of equity", positions_n: n => `${n} position${n === 1 ? "" : "s"}`,
     realised: "Realised", fees: "Fees paid", daystart: "Day start", newtoday: "New positions today", halts: "Halts", none: "none",
+    netreturn: "Net return", maxdd: "Max drawdown", dataq: "Data quality", data_ok: "current", data_stale: "STALE", data_age: a => `prices ${a} min old`,
     halt_total: "TOTAL LOSS", halt_daily: "DAILY LOSS", startcap: "Starting capital", started: "Started",
     fxnote: (rep, q, r, t) => `1 ${rep} = ${r} ${q}, rate of ${t}`,
     noposition: "No open position. The capital sits in cash until an uptrend is confirmed.",
@@ -220,7 +222,7 @@ const I18N = {
     th: { product: "Market", qty: "Qty", entry: "Entry", last: "Last", upnl: "Unreal. P&L", stop: "Stop", target: "Target", strategy: "Strategy",
           time: "Time", side: "Side", price: "Price", fee: "Fee", pnl: "P&L", status: "Status", reason: "Reason", kind: "Kind", detail: "Detail", limit: "Limit" },
     limits_k: { max_position: "Max per position", max_exposure: "Max invested", min_reserve: "Minimum reserve", risk_per_trade: "Risk per trade", daily_loss_limit: "Daily loss limit", total_loss_limit: "Total loss limit" },
-    kinds: { start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened" },
+    kinds: { start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale" },
     status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
     empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
     done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
@@ -292,9 +294,12 @@ async function refresh() {
     $('l-cash').textContent = `${t.cash} (${q})`; $('v-cash').textContent = fmt(st.cash); $('s-cash').textContent = st.equity ? `${fmt(st.cash / st.equity * 100, 0)} % ${t.of_equity}` : '';
     $('l-inv').textContent = `${t.invested} (${q})`; $('v-inv').textContent = fmt(st.exposure); $('s-inv').textContent = t.positions_n(Object.keys(st.positions || {}).length);
     const haltTxt = (st.halted_total ? t.halt_total + ' ' : '') + (st.halted_daily ? t.halt_daily : '') || t.none;
+    const perf = s.performance || {}, dq = s.data_quality || {};
     $('minis').innerHTML = [
+      [t.netreturn, pct((perf.net_return || 0) * 100), (perf.net_return || 0) >= 0 ? 'up' : 'down'], [t.maxdd, fmt((perf.max_drawdown || 0) * 100) + ' %', (perf.max_drawdown || 0) > 0.05 ? 'warnc' : ''],
       [t.realised + ` (${q})`, fmt(st.realised_pnl), st.realised_pnl >= 0 ? 'up' : 'down'], [t.fees + ` (${q})`, fmt(st.fees_paid)], [t.daystart + ` (${q})`, fmt(st.day_start_equity)],
-      [t.newtoday, st.new_positions_today ?? '–'], [t.halts, haltTxt, (st.halted_total || st.halted_daily) ? 'down' : 'up'], [t.started, dt(s.started_at)],
+      [t.newtoday, st.new_positions_today ?? '–'], [t.halts, haltTxt, (st.halted_total || st.halted_daily) ? 'down' : 'up'],
+      [t.dataq, dq.age_seconds >= 0 ? (dq.ok ? t.data_ok : t.data_stale) + ' · ' + t.data_age(Math.round(dq.age_seconds / 60)) : '–', dq.ok ? 'up' : 'down'], [t.started, dt(s.started_at)],
     ].map(([l, v, c]) => `<div class="mini"><div class="l">${l}</div><div class="v ${c || ''}">${v}</div></div>`).join('');
     $('fxnote').textContent = r ? t.fxnote(rep, q, fmt(r.fx_rate, 4), dt(r.fx_rate_ts)) : '';
     const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee }; });

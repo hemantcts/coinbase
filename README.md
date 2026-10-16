@@ -38,6 +38,9 @@ market data ──> strategies ──> risk controller ──> broker ──> le
 * **Orders**: entries and planned exits are post-only limit orders (maker
   fee), re-priced up to `ORDER_RETRIES` times if unfilled, marketable on the
   last attempt. Stop-loss and flatten are marketable at once (taker fee).
+* **Data quality**: if the newest candle is older than two candle lengths (`MAX_DATA_AGE`),
+  the engine logs it, alerts, and the risk controller blocks new buys until fresh data arrives.
+  Exits keep working. A gap through a stop fills at the open, not at the stop.
 * **Engine** (`trader/engine.py`) runs one cycle per closed candle. Orders get
   deterministic client ids, are written to the database *before* submission
   and never re-run for a candle that was already processed. Restarts restore
@@ -85,6 +88,7 @@ any amount. `python -m trader profiles` prints them in money:
 
 | profile | max position | max invested | reserve | risk/trade | daily loss | total loss | new/day | fixed stop / target | ATR trail | edge vs costs |
 |---|---|---|---|---|---|---|---|---|---|---|
+| **client** (configured) | 10 % | 30 % | 70 % | 0.25 % | 2 % | 8 % | 3 | 2 % / 4 % | 6 × ATR | 1.5× |
 | low    | 15 % | 40 % | 60 % | 0.25 % | 1 % | 5 %  | 2 | 1.5 % / 3 % | 4 × ATR | 2.0× |
 | medium | 25 % | 60 % | 40 % | 0.5 %  | 2 % | 8 %  | 4 | 2 % / 4 %   | 6 × ATR | 1.5× |
 | high   | 35 % | 80 % | 20 % | 1 %    | 4 % | 15 % | 6 | 3 % / 6 %   | 8 × ATR | 1.2× |
@@ -92,7 +96,10 @@ any amount. `python -m trader profiles` prints them in money:
 The fixed stop and target apply to the fast strategies. `trendhold` uses the
 trailing ATR stop (raised after every closed candle, never lowered) and no target.
 
-`medium` on CHF 1 000 is the configuration from the brief: 250 / 600 / 400 / 5 / 20 / 80 CHF, four new positions per day.
+`client` is the client's preliminary limit set from the plan of 16 Oct 2026 (CHF 100 per position, CHF 300
+invested, CHF 20 daily, CHF 80 total) and is what paper trading runs with. `medium` is the first brief
+(250 / 600 / 400 / 5 / 20 / 80 CHF). Two years of history with `client`: +4.1 % vs +1.2 % buy-and-hold at the
+same exposure, worst dip 1.2 %, max drawdown 8.3 %, 35 trades, fees EUR 55.
 The live pilot additionally caps every profile at 10 % per position and 20 % invested (CHF 100 / 200).
 
 ## Quick start

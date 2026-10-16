@@ -42,6 +42,7 @@ class RiskController:
         self.costs = costs
         self.specs = specs or {}
         self.manual_stop = False       # set by the engine when the STOP file exists
+        self.stale_data = False        # set by the engine when market data is too old; blocks new buys
         # Research only: days after which a total-loss halt clears itself. 0 = never (live behaviour:
         # the owner reviews the cause and restarts by hand).
         self.halt_reset_days = 0
@@ -111,6 +112,8 @@ class RiskController:
             return Decision(False, "invalid price")
         if self.manual_stop:
             return Decision(False, "manual STOP active")
+        if self.stale_data:
+            return Decision(False, "market data stale, no new buys")
         if state.halted_total:
             return Decision(False, "total loss limit reached, trading halted")
         if state.halted_daily:
@@ -167,11 +170,16 @@ class RiskController:
         if position.qty <= 0:
             return None
         if position.stop_price > 0 and candle.low <= position.stop_price:
-            sig = Signal(position.product, Side.SELL, "risk", 1.0, 0.0, f"stop-loss {position.stop_price:.2f} hit (low {candle.low:.2f})")
-            return OrderIntent(position.product, Side.SELL, position.stop_price, sig, sig.reason)
+            # A gap through the stop fills at the open, not at the stop: the simulator must not flatter us.
+            fill = min(position.stop_price, candle.open) if candle.open > 0 else position.stop_price
+            gap = " after a gap" if fill < position.stop_price else ""
+            sig = Signal(position.product, Side.SELL, "risk", 1.0, 0.0,
+                         f"stop-loss {position.stop_price:.2f} hit{gap} (low {candle.low:.2f}, fill ~{fill:.2f})")
+            return OrderIntent(position.product, Side.SELL, fill, sig, sig.reason)
         if position.take_profit_price > 0 and candle.high >= position.take_profit_price:
+            fill = max(position.take_profit_price, candle.open) if candle.open > 0 else position.take_profit_price
             sig = Signal(position.product, Side.SELL, "risk", 1.0, 0.0, f"take-profit {position.take_profit_price:.2f} hit (high {candle.high:.2f})")
-            return OrderIntent(position.product, Side.SELL, position.take_profit_price, sig, sig.reason)
+            return OrderIntent(position.product, Side.SELL, fill, sig, sig.reason)
         return None
 
     def trail_stop(self, position: Position, candles: list[Candle]) -> float | None:
