@@ -108,11 +108,12 @@ def test_dashboard_login_protects_everything_and_blocks_indexing(tmp_path: Path)
     import base64
     s = Settings(data_dir=tmp_path, dashboard_user="admin", dashboard_password="pw-123", dashboard_token="tok")
     c = TestClient(create_app(s))
-    r = c.get("/")
-    assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic") and "Trading" not in r.text
+    r = c.get("/", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/login"
     assert c.get("/api/state").status_code == 401
+    assert "Benutzername" in c.get("/login").text
     bad = {"Authorization": "Basic " + base64.b64encode(b"admin:wrong").decode()}
-    assert c.get("/", headers=bad).status_code == 401
+    assert c.get("/", headers=bad, follow_redirects=False).status_code == 302
     good = {"Authorization": "Basic " + base64.b64encode(b"admin:pw-123").decode()}
     r = c.get("/", headers=good)
     assert r.status_code == 200 and "noindex" in r.text and r.headers["x-robots-tag"].startswith("noindex")
@@ -136,3 +137,29 @@ def test_viewer_login_sees_data_but_cannot_control(tmp_path: Path):
     assert not s.flatten_file.exists()
     assert c.get("/api/state", headers=admin).json()["role"] == "admin"
     assert c.post("/api/control/stop", headers=admin).status_code == 200
+
+
+def test_login_page_sessions_and_logout(tmp_path: Path):
+    s = Settings(data_dir=tmp_path, dashboard_user="admin", dashboard_password="pw-1", dashboard_viewer_user="client", dashboard_viewer_password="pw-2")
+    c = TestClient(create_app(s))
+    r = c.post("/login", data={"username": "admin", "password": "nope"}, follow_redirects=False)
+    assert r.status_code == 401 and "bad" in r.text and "ta_session" not in r.cookies
+    r = c.post("/login", data={"username": "client", "password": "pw-2", "next": "/"}, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/" and "ta_session" in r.cookies
+    assert c.get("/", follow_redirects=False).status_code == 200                 # cookie kept by the client
+    st = c.get("/api/state").json()
+    assert st["role"] == "viewer"
+    assert c.post("/api/control/stop").status_code == 403
+    # Tampered cookie is rejected
+    c2 = TestClient(create_app(s))
+    c2.cookies.set("ta_session", r.cookies["ta_session"][:-4] + "0000")
+    assert c2.get("/", follow_redirects=False).status_code == 302
+    # Logout clears the session
+    assert c.get("/logout", follow_redirects=False).status_code == 302
+    assert c.get("/", follow_redirects=False).status_code == 302
+    # Admin session can control; rotating the password invalidates sessions
+    c3 = TestClient(create_app(s))
+    c3.post("/login", data={"username": "admin", "password": "pw-1"}, follow_redirects=False)
+    assert c3.post("/api/control/stop").status_code == 200
+    s.dashboard_password = "rotated"
+    assert c3.get("/", follow_redirects=False).status_code == 302

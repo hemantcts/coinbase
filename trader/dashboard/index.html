@@ -108,6 +108,7 @@
       <span class="meta" id="meta"></span>
       <div class="seg" id="lang"><button data-lang="de">DE</button><button data-lang="en">EN</button></div>
       <button class="iconbtn" id="theme" title="Theme">◐</button>
+      <button class="iconbtn" id="logout" title="Logout" style="display:none;width:auto;padding:0 10px;font-size:12.5px;font-weight:600"></button>
     </div>
   </div>
 </header>
@@ -197,7 +198,8 @@ const I18N = {
     limits_k: { max_position: "Max. pro Position", max_exposure: "Max. investiert", min_reserve: "Mindestreserve", risk_per_trade: "Risiko pro Trade", daily_loss_limit: "Tagesverlustgrenze", total_loss_limit: "Gesamtverlustgrenze", max_peak_drawdown_pct: "Max. Rückgang vom Höchststand (%)" },
     severe_banner: r => `Verifiziertes Ereignis, keine neuen Käufe: ${r}`,
     viewer_note: "Lesezugriff. Die Not-Aus-Funktionen stehen nur dem Betreiber-Login zur Verfügung.",
-    kinds: { severe_event: "Schweres Ereignis", start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet" },
+    logout: "Abmelden", role_admin: "Betreiber", role_viewer: "Lesezugriff",
+    kinds: { login: "Anmeldung", severe_event: "Schweres Ereignis", start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet" },
     status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
     empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
     done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
@@ -228,7 +230,8 @@ const I18N = {
     limits_k: { max_position: "Max per position", max_exposure: "Max invested", min_reserve: "Minimum reserve", risk_per_trade: "Risk per trade", daily_loss_limit: "Daily loss limit", total_loss_limit: "Total loss limit", max_peak_drawdown_pct: "Max drawdown from peak (%)" },
     severe_banner: r => `Verified severe event, no new buys: ${r}`,
     viewer_note: "View-only access. The emergency controls are available to the operator login only.",
-    kinds: { severe_event: "Severe event", start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale" },
+    logout: "Sign out", role_admin: "Operator", role_viewer: "View only",
+    kinds: { login: "Login", severe_event: "Severe event", start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale" },
     status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
     empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
     done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
@@ -287,6 +290,7 @@ async function refresh() {
     const s = await api('/api/state'); const st = s.state || {}; const h = s.health; const q = s.quote_currency, rep = s.report_currency;
     document.querySelector('.tokenrow').style.display = s.auth_mode === 'basic' ? 'none' : 'flex';
     const viewer = s.role === 'viewer';
+    const lo = $('logout'); if (s.auth_mode === 'basic') { lo.style.display = 'inline-block'; lo.textContent = (viewer ? t.role_viewer : t.role_admin) + ' · ' + t.logout; }
     document.querySelector('.controls').style.display = viewer ? 'none' : 'grid';
     document.querySelector('[data-i="controls-note"]').textContent = viewer ? t.viewer_note : t['controls-note'];
     pill('p-mode', s.mode === 'live' ? 'warn' : 'info', `${t.mode[s.mode] || s.mode} · ${s.strategy} · ${s.profile}`);
@@ -329,7 +333,7 @@ async function refresh() {
     const ev = await api('/api/events?limit=150');
     table('events', ev, [{ h: t.th.time, f: r => dt(r.ts) }, { h: t.th.kind, f: r => t.kinds[r.kind] || r.kind, cls: r => ({ halt: 'down', error: 'down', fill: 'up', order_rejected: 'warnc' })[r.kind] || '' }, { h: t.th.detail, f: r => r.detail.length > 170 ? r.detail.slice(0, 170) + '…' : r.detail }]);
   } catch (e) {
-    if (e.status === 401) { $('meta').textContent = t.need_token; pill('p-engine', '', '…'); } else { $('meta').textContent = (t.failed) + ': ' + e.message; }
+    if (e.status === 401) { if (localStorage.getItem('token')) { $('meta').textContent = t.need_token; pill('p-engine', '', '…'); } else { location.href = '/login'; } } else { $('meta').textContent = (t.failed) + ': ' + e.message; }
   }
 }
 async function control(action) {
@@ -339,6 +343,7 @@ async function control(action) {
 document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => control(b.dataset.act));
 document.querySelectorAll('#lang button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 $('theme').onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const next = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = next; localStorage.setItem('theme', next); drawChart(); };
+$('logout').onclick = () => { fetch('/logout', { method: 'POST' }).then(() => location.href = '/login'); };
 $('eye').onclick = () => { const i = $('token'); i.type = i.type === 'password' ? 'text' : 'password'; };
 let tokenTimer = null;
 $('token').addEventListener('input', () => { clearTimeout(tokenTimer); tokenTimer = setTimeout(() => { $('token').value = cleanToken($('token').value); refresh(); }, 400); });
