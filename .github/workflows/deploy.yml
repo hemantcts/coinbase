@@ -26,7 +26,7 @@ jobs:
     environment: production
     env:
       # Where the code lives on the server. Override with a repository variable APP_DIR if it moves.
-      APP_DIR: ${{ vars.APP_DIR || '/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch' }}
+      APP_DIR: ${{ vars.APP_DIR || '/opt/trading-agent' }}
     steps:
       - uses: actions/checkout@v4
 

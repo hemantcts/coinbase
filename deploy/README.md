@@ -1,6 +1,6 @@
 # Deploying to the VPS
 
-Every push to `main` runs the tests and, if they pass, copies the code to `/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch` on the server over SSH
+Every push to `main` runs the tests and, if they pass, copies the code to `/opt/trading-agent` on the server over SSH
 and runs `deploy/server-setup.sh` there. Nothing on the server needs GitHub access, and the
 server's `.env` and `data/` directory are never overwritten.
 
@@ -74,7 +74,7 @@ CloudPanel, so point its nginx at the dashboard instead of at files:
 3. Site → Security → Basic Auth, if your CloudPanel version has it: add a user. This keeps the
    page itself private. The data and the STOP / FLATTEN buttons are additionally protected by
    `DASHBOARD_TOKEN`, found with
-   `sudo grep DASHBOARD_TOKEN /home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`.
+   `sudo grep DASHBOARD_TOKEN /opt/trading-agent/.env`.
 
 Alternatively delete the site and recreate it as type **Reverse Proxy** with URL `http://127.0.0.1:8090`.
 
@@ -88,7 +88,7 @@ operates the server from the chat.
 ## Day to day, on the server
 
 ```
-cd /home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch
+cd /opt/trading-agent
 sudo docker compose logs -f trader
 sudo docker compose exec trader python -m trader status
 sudo docker compose exec trader python -m trader control stop      # no new buys
