@@ -3,7 +3,7 @@
 set -euo pipefail
 KEY="${1:-}"; VALUE="${2:-}"
 case "$KEY" in
-  RISK_PROFILE|STRATEGY|HALT_RESET_DAYS|FEE_RATE|TAKER_FEE_RATE|PRODUCTS|NOTIFY_WEBHOOK|MAX_DATA_AGE|DASHBOARD_BIND_PORT) ;;
+  RISK_PROFILE|STRATEGY|HALT_RESET_DAYS|FEE_RATE|TAKER_FEE_RATE|PRODUCTS|NOTIFY_WEBHOOK|MAX_DATA_AGE|DASHBOARD_BIND_PORT|DASHBOARD_USER|DASHBOARD_PASSWORD|DASHBOARD_TOKEN) ;;
   *) echo "key '$KEY' is not allowed (never LIVE_TRADING or secrets from here)"; exit 1 ;;
 esac
 [ -n "$VALUE" ] || { echo "value required"; exit 1; }
@@ -14,7 +14,7 @@ if grep -q "^${KEY}=" .env; then
 else
   printf '%s=%s\n' "$KEY" "$VALUE" >> .env
 fi
-echo "now: $(grep "^${KEY}=" .env)"
+case "$KEY" in DASHBOARD_PASSWORD|DASHBOARD_TOKEN|NOTIFY_WEBHOOK) echo "now: ${KEY}=***" ;; *) echo "now: $(grep "^${KEY}=" .env)" ;; esac
 docker compose up -d --force-recreate trader dashboard   # restart alone keeps the old environment
 sleep 8
 docker compose logs --tail 6 --no-color trader

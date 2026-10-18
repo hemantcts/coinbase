@@ -63,7 +63,9 @@ jobs:
           VALUE: ${{ inputs.value }}
         run: |
           case "$ACTION" in
-            set-env)    CMD="bash deploy/set-env.sh $KEY $VALUE" ;;
+            set-env)
+              case "$KEY" in DASHBOARD_PASSWORD|DASHBOARD_TOKEN|NOTIFY_WEBHOOK) echo "secrets are set on the server over SSH, not through GitHub: sudo bash deploy/set-env.sh $KEY '<value>'"; exit 1 ;; esac
+              CMD="bash deploy/set-env.sh $KEY $VALUE" ;;
             migrate)    CMD="bash deploy/migrate.sh $APP_DIR ${VALUE:-/opt/trading-agent}" ;;
             show-env)   CMD="sed -E s/^\(DASHBOARD_TOKEN\|COINBASE_API_KEY\|COINBASE_API_SECRET\|NOTIFY_WEBHOOK\)=.+/\\1=***/ .env" ;;
             status)     CMD="docker compose exec -T trader python -m trader status" ;;

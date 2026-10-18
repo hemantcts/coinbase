@@ -36,6 +36,12 @@ if [ ! -f .env ]; then
 else
   echo "    .env kept"
 fi
+if ! grep -q '^DASHBOARD_PASSWORD=.\+' .env; then
+  PW="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))' 2>/dev/null || openssl rand -hex 18)"
+  grep -q '^DASHBOARD_USER=' .env && sed -i 's|^DASHBOARD_USER=.*|DASHBOARD_USER=admin|' .env || echo 'DASHBOARD_USER=admin' >> .env
+  grep -q '^DASHBOARD_PASSWORD=' .env && sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=${PW}|" .env || echo "DASHBOARD_PASSWORD=${PW}" >> .env
+  echo "    created dashboard login (user admin); read it with: sudo grep DASHBOARD_ $APP_DIR/.env"
+fi
 grep -q '^LIVE_TRADING=true' .env && { echo "REFUSING: LIVE_TRADING=true in .env on an automated deploy"; exit 1; }
 mkdir -p data data/history
 chown -R 10001:10001 data

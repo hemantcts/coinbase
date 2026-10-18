@@ -232,6 +232,23 @@ tests/             50 unit and integration tests
 * Live mode uses marketable limit orders cancelled after 3 minutes if unfilled;
   partial fills are booked as positions.
 
+## Access and privacy
+
+The dashboard sits behind a username and password (`DASHBOARD_USER` / `DASHBOARD_PASSWORD`,
+HTTP Basic over HTTPS). Without them every path, including the page itself, answers a bare 401
+with no product name. All responses carry `X-Robots-Tag: noindex, nofollow, noarchive`,
+`/robots.txt` disallows everything, and the page has a `noindex` meta tag. The API token still
+works for scripts. The deploy generates a random password on the first run; read or change it
+on the server:
+
+```bash
+sudo grep DASHBOARD_ /opt/trading-agent/.env
+sudo bash /opt/trading-agent/deploy/set-env.sh DASHBOARD_PASSWORD 'a-new-strong-password'
+```
+
+Known limit: the hostname itself is public through certificate-transparency logs, as every
+HTTPS site is. Nothing behind it is.
+
 ## Naming
 
 The product is called "Trading Agent". "Coinbase" is the exchange it trades on and is only ever

@@ -102,3 +102,22 @@ def test_dashboard_auth_and_controls(tmp_path: Path):
     assert client.post("/api/control/nope", headers={"X-Token": "secret"}).status_code == 404
     open_client = TestClient(create_app(Settings(data_dir=tmp_path)))
     assert open_client.post("/api/control/stop").status_code == 403
+
+
+def test_dashboard_login_protects_everything_and_blocks_indexing(tmp_path: Path):
+    import base64
+    s = Settings(data_dir=tmp_path, dashboard_user="admin", dashboard_password="pw-123", dashboard_token="tok")
+    c = TestClient(create_app(s))
+    r = c.get("/")
+    assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic") and "Trading" not in r.text
+    assert c.get("/api/state").status_code == 401
+    bad = {"Authorization": "Basic " + base64.b64encode(b"admin:wrong").decode()}
+    assert c.get("/", headers=bad).status_code == 401
+    good = {"Authorization": "Basic " + base64.b64encode(b"admin:pw-123").decode()}
+    r = c.get("/", headers=good)
+    assert r.status_code == 200 and "noindex" in r.text and r.headers["x-robots-tag"].startswith("noindex")
+    st = c.get("/api/state", headers=good)
+    assert st.status_code == 200 and st.json()["auth_mode"] == "basic"
+    assert c.post("/api/control/stop", headers=good).status_code == 200
+    assert c.get("/api/state", headers={"X-Token": "tok"}).status_code == 200         # token still works for scripts
+    assert c.get("/robots.txt").status_code == 200 and "Disallow: /" in c.get("/robots.txt").text

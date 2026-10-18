@@ -33,8 +33,8 @@ The client's plan numbers phases 0.3 … 1.0; `CHANGELOG.md` maps our versions o
 - **Operate**: GitHub → Actions → "Server command" → Run workflow → pick `status`, `logs`, `events`,
   `gate`, `backtest`, `containers`, `restart`, `stop`, `resume`, `flatten`, `show-env`, or `set-env`
   with a key and value (whitelisted keys only, never LIVE_TRADING). Output is in the job log.
-- **Watch**: the dashboard. Token is `DASHBOARD_TOKEN` in the server's `.env`
-  (`/opt/trading-agent/.env`). One-time link: `https://agent.loewenmut.ch/?token=...`.
+- **Watch**: the dashboard. Login is `DASHBOARD_USER` / `DASHBOARD_PASSWORD` in the server's `.env` (the browser asks); the API token `DASHBOARD_TOKEN` is for scripts
+  (`/opt/trading-agent/.env`). Secrets are changed over SSH with `deploy/set-env.sh`, never through GitHub.
 - **Secrets** live in GitHub → Settings → Secrets: `VPS_HOST`, `VPS_USER` (`ubuntu`), `VPS_PORT`, `VPS_SSH_KEY`.
   SSH key pair for the deploy is on the previous developer's machine; generate a new one if lost
   (`deploy/README.md` step 1–3).

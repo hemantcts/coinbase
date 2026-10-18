@@ -1,13 +1,16 @@
 """Read-mostly dashboard plus the emergency controls. Serves the SQLite data the trader writes."""
 from __future__ import annotations
 
+import base64
 import json
+import secrets
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from ..config import Settings
 from ..gate import gate_status
@@ -22,19 +25,69 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.settings = settings
     store = Store(settings.database)
 
-    def auth(request: Request) -> None:
+    basic_enabled = bool(settings.dashboard_user and settings.dashboard_password)
+
+    def _basic_ok(request: Request) -> bool:
+        header = request.headers.get("authorization", "")
+        if not header.lower().startswith("basic "):
+            return False
+        try:
+            user, _, pw = base64.b64decode(header[6:].strip()).decode("utf-8").partition(":")
+        except Exception:
+            return False
+        ok_user = secrets.compare_digest(user.encode(), settings.dashboard_user.encode())
+        ok_pw = secrets.compare_digest(pw.encode(), settings.dashboard_password.encode())
+        return ok_user and ok_pw
+
+    def _token_ok(request: Request) -> bool:
         token = settings.dashboard_token
         if not token:
+            return False
+        given = request.headers.get("x-token") or request.query_params.get("token") or request.cookies.get("token") or ""
+        return secrets.compare_digest(given.encode(), token.encode())
+
+    def page_auth(request: Request) -> None:
+        """Username + password for the page itself (browser prompt). Only when configured."""
+        if not basic_enabled:
             return
-        given = request.headers.get("x-token") or request.query_params.get("token") or request.cookies.get("token")
-        if given != token:
+        if _basic_ok(request):
+            return
+        time.sleep(0.8)                      # slow down guessing
+        raise HTTPException(status_code=401, detail="authentication required",
+                            headers={"WWW-Authenticate": 'Basic realm="Private", charset="UTF-8"'})
+
+    def auth(request: Request) -> None:
+        """Data and controls: the login (if configured) or the API token."""
+        if basic_enabled:
+            if _basic_ok(request) or _token_ok(request):
+                return
+            time.sleep(0.8)
+            raise HTTPException(status_code=401, detail="authentication required",
+                                headers={"WWW-Authenticate": 'Basic realm="Private", charset="UTF-8"'})
+        if not settings.dashboard_token:
+            return
+        if not _token_ok(request):
             raise HTTPException(status_code=401, detail="missing or wrong token")
 
     def control_allowed() -> None:
-        if not settings.dashboard_token:
-            raise HTTPException(status_code=403, detail="set DASHBOARD_TOKEN to enable controls")
+        if not settings.dashboard_token and not basic_enabled:
+            raise HTTPException(status_code=403, detail="set DASHBOARD_USER/DASHBOARD_PASSWORD or DASHBOARD_TOKEN to enable controls")
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.middleware("http")
+    async def private_headers(request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/robots.txt", response_class=PlainTextResponse)
+    def robots() -> str:
+        return "User-agent: *\nDisallow: /\n"
+
+    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(page_auth)])
     def index() -> HTMLResponse:
         # Never let browsers (phones especially) keep a stale copy of the page after a deploy.
         return HTMLResponse(TEMPLATE.read_text(encoding="utf-8"),
@@ -61,6 +114,7 @@ def create_app(settings: Settings) -> FastAPI:
         max_age = settings.max_data_age or 2 * settings.granularity
         d: dict[str, Any] = {
             "now": now.isoformat(timespec="seconds"),
+            "auth_mode": "basic" if basic_enabled else ("token" if settings.dashboard_token else "open"),
             "mode": store.get_meta("mode", "paper"),
             "strategy": store.get_meta("strategy", settings.strategy),
             "profile": store.get_meta("risk_profile", settings.risk_profile),

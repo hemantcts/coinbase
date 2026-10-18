@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
 <title>Trading Agent</title>
 <style>
   :root {
@@ -176,7 +178,7 @@ const I18N = {
     limits: "Risikolimiten", controls: "Not-Aus", orders: "Aufträge", events: "Ereignisse",
     "b-stop": "STOP neue Käufe", "b-stop-s": "Verkäufe und Stops laufen weiter", "b-resume": "Fortsetzen", "b-resume-s": "STOP aufheben",
     "b-flatten": "ALLES VERKAUFEN", "b-flatten-s": "alle Positionen schliessen, dann STOP", "b-disarm": "ECHTGELD SPERREN", "b-disarm-s": "Freigabe für Echtgeld entfernen",
-    "controls-note": "STOP verhindert neue Positionen; Verkäufe, Stop-Loss und Gewinnmitnahmen laufen weiter. ALLES VERKAUFEN schliesst beim nächsten Zyklus alle Positionen und setzt STOP. Für die Knöpfe braucht es das Token aus der .env-Datei auf dem Server.",
+    "controls-note": "STOP verhindert neue Positionen; Verkäufe, Stop-Loss und Gewinnmitnahmen laufen weiter. ALLES VERKAUFEN schliesst beim nächsten Zyklus alle Positionen und setzt STOP.",
     mode: { paper: "Simulation", live: "ECHTGELD", backtest: "Backtest" },
     engine_ok: "Agent läuft", engine_stale: "Agent reagiert nicht", trading_on: "Handel aktiv", stop: "STOP aktiv", flatten: "Verkauf angefordert",
     gate_ok: "Freigabe bestanden", gate_no: "Freigabe noch offen", lastcycle: "letzter Zyklus", errors: "Fehler in Folge",
@@ -206,7 +208,7 @@ const I18N = {
     limits: "Risk limits", controls: "Emergency controls", orders: "Orders", events: "Events",
     "b-stop": "STOP new buys", "b-stop-s": "exits and stops keep working", "b-resume": "Resume", "b-resume-s": "clear STOP",
     "b-flatten": "FLATTEN", "b-flatten-s": "sell everything, then STOP", "b-disarm": "DISARM live", "b-disarm-s": "remove the live arming",
-    "controls-note": "STOP blocks new positions; exits, stop-loss and take-profit keep working. FLATTEN sells everything at the next cycle and engages STOP. The buttons need the token from the .env file on the server.",
+    "controls-note": "STOP blocks new positions; exits, stop-loss and take-profit keep working. FLATTEN sells everything at the next cycle and engages STOP.",
     mode: { paper: "Paper", live: "LIVE", backtest: "Backtest" },
     engine_ok: "engine running", engine_stale: "engine not responding", trading_on: "trading enabled", stop: "STOP active", flatten: "flatten pending",
     gate_ok: "gate passed", gate_no: "gate not passed", lastcycle: "last cycle", errors: "errors in a row",
@@ -281,6 +283,7 @@ async function refresh() {
   const t = T();
   try {
     const s = await api('/api/state'); const st = s.state || {}; const h = s.health; const q = s.quote_currency, rep = s.report_currency;
+    document.querySelector('.tokenrow').style.display = s.auth_mode === 'basic' ? 'none' : 'flex';
     pill('p-mode', s.mode === 'live' ? 'warn' : 'info', `${t.mode[s.mode] || s.mode} · ${s.strategy} · ${s.profile}`);
     pill('p-engine', h.stale ? 'bad' : 'ok', h.stale ? t.engine_stale : t.engine_ok);
     pill('p-trading', h.flatten_pending ? 'warn' : (h.manual_stop ? 'warn' : 'ok'), h.flatten_pending ? t.flatten : (h.manual_stop ? t.stop : t.trading_on));
