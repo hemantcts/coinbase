@@ -251,6 +251,17 @@ def cmd_resample_history(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_events(settings: Settings, args: argparse.Namespace) -> int:
+    """Print the event log, oldest first; optionally one kind only (control, fill, halt, error, ...)."""
+    store = Store(settings.database)
+    rows = store.events(limit=args.limit, kind=args.kind or None)
+    for e in reversed(rows):
+        print(e["ts"], e["kind"], e["detail"][:args.width])
+    if not rows:
+        print("(no events" + (f" of kind {args.kind}" if args.kind else "") + ")")
+    return 0
+
+
 def cmd_status(settings: Settings, args: argparse.Namespace) -> int:
     store = Store(settings.database)
     st = store.load_state()
@@ -320,6 +331,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("live", help="trade real money (gated)")
     sub.add_parser("verify-live", help="read-only check of the Coinbase API key")
     sub.add_parser("status", help="print the current account state")
+    s = sub.add_parser("events", help="print the event log")
+    s.add_argument("--kind", default="")
+    s.add_argument("--limit", type=int, default=50)
+    s.add_argument("--width", type=int, default=220)
     s = sub.add_parser("resample-history", help="aggregate cached candles into a coarser timeframe")
     s.add_argument("--source", type=int, default=3600)
     s.add_argument("--target", type=int, default=21600)
@@ -336,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         "profiles": cmd_profiles, "fetch-history": cmd_fetch_history, "backtest": cmd_backtest, "gate": cmd_gate,
         "paper": cmd_paper, "live": cmd_live, "verify-live": cmd_verify_live, "status": cmd_status,
         "dashboard": cmd_dashboard, "control": cmd_control,
-        "export-history": cmd_export_history, "import-history": cmd_import_history,
+        "export-history": cmd_export_history, "import-history": cmd_import_history, "events": cmd_events,
         "resample-history": cmd_resample_history,
     }
     try:
