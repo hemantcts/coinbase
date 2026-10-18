@@ -115,16 +115,26 @@ def test_restart_during_open_order_does_not_duplicate(tmp_path):
     assert store.count_events("fill") == 1 and len(store.fills()) == 1
 
 
+class NeverBuy(Strategy):
+    name = "never"
+    warmup = 5
+
+    def evaluate(self, product, candles, position):
+        return self.hold(product)
+
+
 def test_flatten_with_nothing_to_sell_cancels_itself(tmp_path):
     store = Store(":memory:")
-    rows = make_candles(30, vol=0.0005, seed=44)       # too calm for the cost filter: no buy
+    rows = make_candles(30, vol=0.01, seed=44)
     store.save_candles("BTC-EUR", G, rows)
-    eng, _ = _engine(store, tmp_path=tmp_path)
+    s = Settings(products=["BTC-EUR"], granularity=G, history_candles=20, data_dir=tmp_path, halt_reset_days=0)
+    eng = Engine(s, store, PaperBroker(s.costs), NeverBuy(), RiskController(PROFILES["client"], s.costs),
+                 StoreDataSource(store, G), fx=None, mode="paper", verbose=False)
     t = datetime.fromtimestamp(rows[-1].ts + G, tz=timezone.utc)
     eng.init_state(t)
-    eng.settings.flatten_file.write_text("x")
+    s.flatten_file.write_text("x")
     eng.run_cycle(t)
-    assert not eng.settings.flatten_file.exists() and not eng.settings.stop_file.exists()
+    assert not s.flatten_file.exists() and not s.stop_file.exists()
     assert store.count_events("flatten") == 1 and store.count_events("fill") == 0
 
 
