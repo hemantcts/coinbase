@@ -58,6 +58,15 @@ find "$APP_DIR/data/backups" -name 'trader-*.sqlite3' -mtime +14 -delete
 CRON
 chmod 755 /etc/cron.daily/coinbase-trader-backup
 
+echo "==> file ownership"
+# Inside a CloudPanel site directory, give the code to the site user so the File Manager can show and
+# edit it; the data directory stays with the container user (10001).
+PARENT_OWNER="$(stat -c %U "$(dirname "$APP_DIR")" 2>/dev/null || echo root)"
+if [ "$PARENT_OWNER" != "root" ] && id "$PARENT_OWNER" >/dev/null 2>&1; then
+  find "$APP_DIR" -path "$APP_DIR/data" -prune -o -exec chown "$PARENT_OWNER:$PARENT_OWNER" {} + 2>/dev/null || true
+  echo "    code owned by $PARENT_OWNER, data by 10001"
+fi
+
 echo "==> start / restart containers"
 docker compose up -d --build --remove-orphans 2>&1 | grep -v "^$" | tail -5
 sleep 8
