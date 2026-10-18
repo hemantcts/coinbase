@@ -21,6 +21,7 @@ on:
           - flatten       # FLATTEN: sell everything at the next cycle, then STOP
           - backtest      # two-year backtest of the configured strategy and profile
           - set-env       # change one whitelisted .env key (needs key + value) and restart the trader
+          - migrate       # one-time move of the app to the directory given in "value" (code, .env, data)
           - show-env      # print the .env with secrets masked
       key:
         description: "set-env only: RISK_PROFILE | STRATEGY | HALT_RESET_DAYS | FEE_RATE | TAKER_FEE_RATE | PRODUCTS | NOTIFY_WEBHOOK | MAX_DATA_AGE"
@@ -63,6 +64,7 @@ jobs:
         run: |
           case "$ACTION" in
             set-env)    CMD="bash deploy/set-env.sh $KEY $VALUE" ;;
+            migrate)    CMD="bash deploy/migrate.sh $APP_DIR ${VALUE:-/opt/trading-agent}" ;;
             show-env)   CMD="sed -E s/^\(DASHBOARD_TOKEN\|COINBASE_API_KEY\|COINBASE_API_SECRET\|NOTIFY_WEBHOOK\)=.+/\\1=***/ .env" ;;
             status)     CMD="docker compose exec -T trader python -m trader status" ;;
             gate)       CMD="docker compose exec -T trader python -m trader gate --days 730 || true" ;;
