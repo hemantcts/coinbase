@@ -42,6 +42,12 @@ if ! grep -q '^DASHBOARD_PASSWORD=.\+' .env; then
   grep -q '^DASHBOARD_PASSWORD=' .env && sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=${PW}|" .env || echo "DASHBOARD_PASSWORD=${PW}" >> .env
   echo "    created dashboard login (user admin); read it with: sudo grep DASHBOARD_ $APP_DIR/.env"
 fi
+if ! grep -q '^DASHBOARD_VIEWER_PASSWORD=.\+' .env; then
+  VPW="$(python3 -c 'import secrets; print(secrets.token_urlsafe(14))' 2>/dev/null || openssl rand -hex 14)"
+  grep -q '^DASHBOARD_VIEWER_USER=' .env && sed -i 's|^DASHBOARD_VIEWER_USER=.*|DASHBOARD_VIEWER_USER=client|' .env || echo 'DASHBOARD_VIEWER_USER=client' >> .env
+  grep -q '^DASHBOARD_VIEWER_PASSWORD=' .env && sed -i "s|^DASHBOARD_VIEWER_PASSWORD=.*|DASHBOARD_VIEWER_PASSWORD=${VPW}|" .env || echo "DASHBOARD_VIEWER_PASSWORD=${VPW}" >> .env
+  echo "    created view-only login (user client)"
+fi
 grep -q '^LIVE_TRADING=true' .env && { echo "REFUSING: LIVE_TRADING=true in .env on an automated deploy"; exit 1; }
 mkdir -p data data/history
 chown -R 10001:10001 data

@@ -196,6 +196,7 @@ const I18N = {
           time: "Zeit", side: "Seite", price: "Preis", fee: "Gebühr", pnl: "G/V", status: "Status", reason: "Grund", kind: "Art", detail: "Details", limit: "Limite" },
     limits_k: { max_position: "Max. pro Position", max_exposure: "Max. investiert", min_reserve: "Mindestreserve", risk_per_trade: "Risiko pro Trade", daily_loss_limit: "Tagesverlustgrenze", total_loss_limit: "Gesamtverlustgrenze", max_peak_drawdown_pct: "Max. Rückgang vom Höchststand (%)" },
     severe_banner: r => `Verifiziertes Ereignis, keine neuen Käufe: ${r}`,
+    viewer_note: "Lesezugriff. Die Not-Aus-Funktionen stehen nur dem Betreiber-Login zur Verfügung.",
     kinds: { severe_event: "Schweres Ereignis", start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet" },
     status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
     empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
@@ -226,6 +227,7 @@ const I18N = {
           time: "Time", side: "Side", price: "Price", fee: "Fee", pnl: "P&L", status: "Status", reason: "Reason", kind: "Kind", detail: "Detail", limit: "Limit" },
     limits_k: { max_position: "Max per position", max_exposure: "Max invested", min_reserve: "Minimum reserve", risk_per_trade: "Risk per trade", daily_loss_limit: "Daily loss limit", total_loss_limit: "Total loss limit", max_peak_drawdown_pct: "Max drawdown from peak (%)" },
     severe_banner: r => `Verified severe event, no new buys: ${r}`,
+    viewer_note: "View-only access. The emergency controls are available to the operator login only.",
     kinds: { severe_event: "Severe event", start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale" },
     status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
     empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
@@ -284,6 +286,9 @@ async function refresh() {
   try {
     const s = await api('/api/state'); const st = s.state || {}; const h = s.health; const q = s.quote_currency, rep = s.report_currency;
     document.querySelector('.tokenrow').style.display = s.auth_mode === 'basic' ? 'none' : 'flex';
+    const viewer = s.role === 'viewer';
+    document.querySelector('.controls').style.display = viewer ? 'none' : 'grid';
+    document.querySelector('[data-i="controls-note"]').textContent = viewer ? t.viewer_note : t['controls-note'];
     pill('p-mode', s.mode === 'live' ? 'warn' : 'info', `${t.mode[s.mode] || s.mode} · ${s.strategy} · ${s.profile}`);
     pill('p-engine', h.stale ? 'bad' : 'ok', h.stale ? t.engine_stale : t.engine_ok);
     pill('p-trading', h.flatten_pending ? 'warn' : (h.manual_stop ? 'warn' : 'ok'), h.flatten_pending ? t.flatten : (h.manual_stop ? t.stop : t.trading_on));

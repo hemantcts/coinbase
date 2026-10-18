@@ -176,8 +176,10 @@ class Settings:
     order_timeout: int = 180             # live: seconds before an unfilled order is cancelled
     fx_fallback_rate: float | None = None    # CHF->EUR, used only if the FX API is down
     dashboard_token: str = ""
-    dashboard_user: str = ""             # username + password protect the whole dashboard (HTTP Basic over HTTPS)
+    dashboard_user: str = ""             # admin login: sees everything and may use the emergency controls
     dashboard_password: str = ""
+    dashboard_viewer_user: str = ""      # optional read-only login for the client: same data, no controls
+    dashboard_viewer_password: str = ""
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8080
     coinbase_api_key: str = ""
@@ -239,6 +241,8 @@ class Settings:
         s.dashboard_token = os.getenv("DASHBOARD_TOKEN", "")
         s.dashboard_user = os.getenv("DASHBOARD_USER", "")
         s.dashboard_password = os.getenv("DASHBOARD_PASSWORD", "")
+        s.dashboard_viewer_user = os.getenv("DASHBOARD_VIEWER_USER", "")
+        s.dashboard_viewer_password = os.getenv("DASHBOARD_VIEWER_PASSWORD", "")
         s.dashboard_host = os.getenv("DASHBOARD_HOST", s.dashboard_host)
         s.dashboard_port = int(os.getenv("DASHBOARD_PORT", s.dashboard_port))
         s.coinbase_api_key = os.getenv("COINBASE_API_KEY", "")

@@ -27,17 +27,27 @@ def create_app(settings: Settings) -> FastAPI:
 
     basic_enabled = bool(settings.dashboard_user and settings.dashboard_password)
 
-    def _basic_ok(request: Request) -> bool:
+    viewer_enabled = bool(settings.dashboard_viewer_user and settings.dashboard_viewer_password)
+
+    def _basic_role(request: Request) -> str:
+        """'admin', 'viewer' or '' for the credentials on the request."""
         header = request.headers.get("authorization", "")
         if not header.lower().startswith("basic "):
-            return False
+            return ""
         try:
             user, _, pw = base64.b64decode(header[6:].strip()).decode("utf-8").partition(":")
         except Exception:
-            return False
-        ok_user = secrets.compare_digest(user.encode(), settings.dashboard_user.encode())
-        ok_pw = secrets.compare_digest(pw.encode(), settings.dashboard_password.encode())
-        return ok_user and ok_pw
+            return ""
+        if secrets.compare_digest(user.encode(), settings.dashboard_user.encode()) and \
+           secrets.compare_digest(pw.encode(), settings.dashboard_password.encode()):
+            return "admin"
+        if viewer_enabled and secrets.compare_digest(user.encode(), settings.dashboard_viewer_user.encode()) and \
+           secrets.compare_digest(pw.encode(), settings.dashboard_viewer_password.encode()):
+            return "viewer"
+        return ""
+
+    def _basic_ok(request: Request) -> bool:
+        return _basic_role(request) != ""
 
     def _token_ok(request: Request) -> bool:
         token = settings.dashboard_token
@@ -69,9 +79,11 @@ def create_app(settings: Settings) -> FastAPI:
         if not _token_ok(request):
             raise HTTPException(status_code=401, detail="missing or wrong token")
 
-    def control_allowed() -> None:
+    def control_allowed(request: Request) -> None:
         if not settings.dashboard_token and not basic_enabled:
             raise HTTPException(status_code=403, detail="set DASHBOARD_USER/DASHBOARD_PASSWORD or DASHBOARD_TOKEN to enable controls")
+        if basic_enabled and _basic_role(request) == "viewer" and not _token_ok(request):
+            raise HTTPException(status_code=403, detail="view-only login: controls are not available")
 
     @app.middleware("http")
     async def private_headers(request: Request, call_next):
@@ -94,7 +106,7 @@ def create_app(settings: Settings) -> FastAPI:
                             headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
     @app.get("/api/state", dependencies=[Depends(auth)])
-    def state() -> dict[str, Any]:
+    def state(request: Request) -> dict[str, Any]:
         st = store.load_state()
         now = utcnow()
         last_cycle = store.get_meta("last_cycle_at")
@@ -115,6 +127,7 @@ def create_app(settings: Settings) -> FastAPI:
         d: dict[str, Any] = {
             "now": now.isoformat(timespec="seconds"),
             "auth_mode": "basic" if basic_enabled else ("token" if settings.dashboard_token else "open"),
+            "role": (_basic_role(request) or ("admin" if _token_ok(request) else "")) if basic_enabled else "admin",
             "mode": store.get_meta("mode", "paper"),
             "strategy": store.get_meta("strategy", settings.strategy),
             "profile": store.get_meta("risk_profile", settings.risk_profile),
