@@ -24,7 +24,7 @@ on:
           - migrate       # one-time move of the app to the directory given in "value" (code, .env, data)
           - show-env      # print the .env with secrets masked
       key:
-        description: "set-env only: RISK_PROFILE | STRATEGY | HALT_RESET_DAYS | FEE_RATE | TAKER_FEE_RATE | PRODUCTS | NOTIFY_WEBHOOK | MAX_DATA_AGE"
+        description: "set-env only: RISK_PROFILE | STRATEGY | HALT_RESET_DAYS | FEE_RATE | TAKER_FEE_RATE | PRODUCTS | NOTIFY_WEBHOOK | MAX_DATA_AGE | DASHBOARD_BIND_PORT"
         required: false
         default: ""
       value:

@@ -3,7 +3,7 @@
 set -euo pipefail
 KEY="${1:-}"; VALUE="${2:-}"
 case "$KEY" in
-  RISK_PROFILE|STRATEGY|HALT_RESET_DAYS|FEE_RATE|TAKER_FEE_RATE|PRODUCTS|NOTIFY_WEBHOOK|MAX_DATA_AGE) ;;
+  RISK_PROFILE|STRATEGY|HALT_RESET_DAYS|FEE_RATE|TAKER_FEE_RATE|PRODUCTS|NOTIFY_WEBHOOK|MAX_DATA_AGE|DASHBOARD_BIND_PORT) ;;
   *) echo "key '$KEY' is not allowed (never LIVE_TRADING or secrets from here)"; exit 1 ;;
 esac
 [ -n "$VALUE" ] || { echo "value required"; exit 1; }
