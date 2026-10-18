@@ -40,7 +40,7 @@ jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      APP_DIR: ${{ vars.APP_DIR || '/opt/trading-agent' }}
+      APP_DIR: ${{ vars.APP_DIR || '/home/loewenmut-agent/htdocs/agent.loewenmut.ch' }}
     steps:
       - name: Prepare SSH
         env:

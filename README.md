@@ -242,8 +242,8 @@ works for scripts. The deploy generates a random password on the first run; read
 on the server:
 
 ```bash
-sudo grep DASHBOARD_ /opt/trading-agent/.env
-sudo bash /opt/trading-agent/deploy/set-env.sh DASHBOARD_PASSWORD 'a-new-strong-password'
+sudo grep DASHBOARD_ /home/loewenmut-agent/htdocs/agent.loewenmut.ch/.env
+sudo bash /home/loewenmut-agent/htdocs/agent.loewenmut.ch/deploy/set-env.sh DASHBOARD_PASSWORD 'a-new-strong-password'
 ```
 
 Known limit: the hostname itself is public through certificate-transparency logs, as every

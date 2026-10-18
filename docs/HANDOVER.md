@@ -34,7 +34,7 @@ The client's plan numbers phases 0.3 … 1.0; `CHANGELOG.md` maps our versions o
   `gate`, `backtest`, `containers`, `restart`, `stop`, `resume`, `flatten`, `show-env`, or `set-env`
   with a key and value (whitelisted keys only, never LIVE_TRADING). Output is in the job log.
 - **Watch**: the dashboard. Login is `DASHBOARD_USER` / `DASHBOARD_PASSWORD` in the server's `.env` (the browser asks); the API token `DASHBOARD_TOKEN` is for scripts
-  (`/opt/trading-agent/.env`). Secrets are changed over SSH with `deploy/set-env.sh`, never through GitHub.
+  (`/home/loewenmut-agent/htdocs/agent.loewenmut.ch/.env`). Secrets are changed over SSH with `deploy/set-env.sh`, never through GitHub.
 - **Secrets** live in GitHub → Settings → Secrets: `VPS_HOST`, `VPS_USER` (`ubuntu`), `VPS_PORT`, `VPS_SSH_KEY`.
   SSH key pair for the deploy is on the previous developer's machine; generate a new one if lost
   (`deploy/README.md` step 1–3).
@@ -106,7 +106,7 @@ On 17 Oct 2026 Doppel, acting for Coinbase Inc., sent a takedown request for the
 `coinbase.loewenmut.ch`. We complied: the product is "Trading Agent", the dashboard lives at
 `agent.loewenmut.ch`, and the old subdomain answers 410 Gone. Never put "Coinbase" in a product
 name, domain, logo or title again; naming the exchange in descriptive text is fine. The app
-was moved to `/opt/trading-agent` on 18 Oct, outside any CloudPanel site, so deleting sites can
+was moved to `/home/loewenmut-agent/htdocs/agent.loewenmut.ch` on 18 Oct, outside any CloudPanel site, so deleting sites can
 never touch it.
 
 ## 9. Known gaps and ideas, in priority order
