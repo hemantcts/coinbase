@@ -184,7 +184,8 @@ def create_app(settings: Settings) -> FastAPI:
             store.log(ts, "control", "STOP set via dashboard")
         elif action == "resume":
             settings.stop_file.unlink(missing_ok=True)
-            store.log(ts, "control", "STOP cleared via dashboard")
+            settings.flatten_file.unlink(missing_ok=True)
+            store.log(ts, "control", "STOP / FLATTEN cleared via dashboard")
         elif action == "flatten":
             settings.flatten_file.write_text(f"flatten via dashboard {ts}\n")
             store.log(ts, "control", "FLATTEN requested via dashboard")

@@ -280,6 +280,7 @@ def cmd_control(settings: Settings, args: argparse.Namespace) -> int:
         settings.stop_file.write_text("stopped via cli\n")
     elif args.action == "resume":
         settings.stop_file.unlink(missing_ok=True)
+        settings.flatten_file.unlink(missing_ok=True)
     elif args.action == "flatten":
         settings.flatten_file.write_text("flatten via cli\n")
     elif args.action == "disarm":

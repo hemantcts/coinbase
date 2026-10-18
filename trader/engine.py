@@ -191,6 +191,14 @@ class Engine:
                     self._log(now, "trail", {"product": product, "stop": round(new_stop, 2), "close": last.close})
 
         # 2. Manual flatten: close everything, then keep the STOP in place.
+        if flatten and not state.positions:
+            # Nothing to sell: a pending FLATTEN must not lie in wait for the next position.
+            try:
+                s.flatten_file.unlink()
+            except OSError:
+                pass
+            self._log(now, "flatten", "FLATTEN requested with no open position: cancelled, nothing sold")
+            flatten = False
         if flatten and state.positions:
             for product in list(state.positions):
                 price = state.last_prices.get(product)
