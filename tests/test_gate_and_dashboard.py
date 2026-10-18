@@ -121,3 +121,18 @@ def test_dashboard_login_protects_everything_and_blocks_indexing(tmp_path: Path)
     assert c.post("/api/control/stop", headers=good).status_code == 200
     assert c.get("/api/state", headers={"X-Token": "tok"}).status_code == 200         # token still works for scripts
     assert c.get("/robots.txt").status_code == 200 and "Disallow: /" in c.get("/robots.txt").text
+
+
+def test_viewer_login_sees_data_but_cannot_control(tmp_path: Path):
+    import base64
+    s = Settings(data_dir=tmp_path, dashboard_user="admin", dashboard_password="pw-1", dashboard_viewer_user="client", dashboard_viewer_password="pw-2")
+    c = TestClient(create_app(s))
+    viewer = {"Authorization": "Basic " + base64.b64encode(b"client:pw-2").decode()}
+    admin = {"Authorization": "Basic " + base64.b64encode(b"admin:pw-1").decode()}
+    assert c.get("/", headers=viewer).status_code == 200
+    st = c.get("/api/state", headers=viewer)
+    assert st.status_code == 200 and st.json()["role"] == "viewer"
+    assert c.post("/api/control/flatten", headers=viewer).status_code == 403
+    assert not s.flatten_file.exists()
+    assert c.get("/api/state", headers=admin).json()["role"] == "admin"
+    assert c.post("/api/control/stop", headers=admin).status_code == 200
