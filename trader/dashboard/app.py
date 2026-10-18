@@ -18,7 +18,7 @@ TEMPLATE = Path(__file__).with_name("index.html")
 
 
 def create_app(settings: Settings) -> FastAPI:
-    app = FastAPI(title="Coinbase AI Trader", docs_url=None, redoc_url=None)
+    app = FastAPI(title="Trading Agent", docs_url=None, redoc_url=None)
     app.state.settings = settings
     store = Store(settings.database)
 

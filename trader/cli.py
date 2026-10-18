@@ -138,7 +138,7 @@ def cmd_paper(settings: Settings, args: argparse.Namespace) -> int:
         print("Refusing to run paper mode with LIVE_TRADING=true. Unset it.", file=sys.stderr)
         return 2
     engine = _make_engine(settings, "paper")
-    print(f"Coinbase AI Trader {__version__} PAPER. No API keys are used. Capital {settings.starting_capital_report:.0f} {settings.report_currency}.")
+    print(f"Trading Agent {__version__} PAPER. No API keys are used. Capital {settings.starting_capital_report:.0f} {settings.report_currency}.")
     engine.run_forever()
     return 0
 
@@ -290,7 +290,7 @@ def cmd_control(settings: Settings, args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="trader", description=f"Coinbase AI Trader {__version__}")
+    p = argparse.ArgumentParser(prog="trader", description=f"Trading Agent {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("profiles", help="show the risk profiles in money terms")

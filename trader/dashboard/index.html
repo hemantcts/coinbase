@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Coinbase AI Trader</title>
+<title>Trading Agent</title>
 <style>
   :root {
     --bg: #f4f6fa; --panel: #ffffff; --panel-2: #f8fafc; --line: #e3e8ef; --text: #0f172a; --muted: #64748b;
@@ -95,7 +95,7 @@
 <body>
 <header>
   <div class="bar">
-    <div class="brand"><div class="logo">C</div><span>Coinbase AI Trader</span></div>
+    <div class="brand"><div class="logo">T</div><span>Trading Agent</span></div>
     <div class="pills">
       <span class="pill" id="p-mode"><span class="dot"></span><span>…</span></span>
       <span class="pill" id="p-engine"><span class="dot"></span><span>…</span></span>
@@ -198,7 +198,7 @@ const I18N = {
     status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
     empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
     done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
-    live_banner: "ECHTGELD-MODUS. Jede Ausführung ist ein echter Auftrag auf Coinbase.",
+    live_banner: "ECHTGELD-MODUS. Jede Ausführung ist ein echter Börsenauftrag.",
     dateloc: "de-CH",
   },
   en: {
@@ -228,7 +228,7 @@ const I18N = {
     status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
     empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
     done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
-    live_banner: "LIVE MODE. Every fill is a real order on Coinbase.",
+    live_banner: "LIVE MODE. Every fill is a real exchange order.",
     dateloc: "en-GB",
   }
 };

@@ -49,12 +49,12 @@ reviewer on it; then every deploy waits for a click.
 Actions → "Deploy to VPS" → Run workflow. Watch the log. On success the last lines show the
 containers running and the first trader log lines. From then on every push to `main` deploys.
 
-## The dashboard on https://coinbase.loewenmut.ch
+## The dashboard on https://agent.loewenmut.ch
 
 The dashboard listens only on `127.0.0.1:8090` on the server (host port `DASHBOARD_BIND_PORT`, default 8090). The site already exists in
 CloudPanel, so point its nginx at the dashboard instead of at files:
 
-1. CloudPanel → Sites → `coinbase.loewenmut.ch` → **Vhost**. Replace the `location / { ... }`
+1. CloudPanel → Sites → `agent.loewenmut.ch` → **Vhost**. Replace the `location / { ... }`
    block (keep everything else, in particular the SSL lines CloudPanel manages) with:
 
    ```nginx

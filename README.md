@@ -1,6 +1,6 @@
-# Coinbase AI Trader
+# Trading Agent
 
-Autonomous spot-trading agent for Coinbase with an independent risk controller,
+Autonomous crypto spot-trading agent, trading on Coinbase through its public and Advanced Trade APIs, with an independent risk controller,
 three strategies, backtesting, paper trading, a web dashboard with an emergency
 stop, an automatic release gate and a gated live mode.
 
@@ -231,3 +231,9 @@ tests/             50 unit and integration tests
   per-user keys; the code is structured so that is a storage swap, not a rewrite.
 * Live mode uses marketable limit orders cancelled after 3 minutes if unfilled;
   partial fills are booked as positions.
+
+## Naming
+
+The product is called "Trading Agent". "Coinbase" is the exchange it trades on and is only ever
+used descriptively; it must not appear in the product name, the domain, logos or page titles
+(trademark notice received 17 Oct 2026, complied with).

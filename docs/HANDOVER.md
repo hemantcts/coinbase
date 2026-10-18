@@ -1,8 +1,8 @@
 # Handover notes for the next developer
 
-Project: Coinbase AI Trader. Autonomous spot-trading agent, Python 3.12, SQLite, FastAPI, Docker.
+Project: Trading Agent (formerly "Coinbase AI Trader"; renamed after a trademark notice on 17 Oct 2026). Autonomous spot-trading agent, Python 3.12, SQLite, FastAPI, Docker.
 Repo: https://github.com/hemantcts/coinbase (branch `main` is production).
-Live: https://coinbase.loewenmut.ch on the client's Lightsail VPS (Ubuntu, CloudPanel, Docker).
+Live: https://agent.loewenmut.ch on the client's Lightsail VPS (Ubuntu, CloudPanel, Docker).
 
 ## 1. Read these first, in this order (30 minutes)
 
@@ -34,7 +34,7 @@ The client's plan numbers phases 0.3 … 1.0; `CHANGELOG.md` maps our versions o
   `gate`, `backtest`, `containers`, `restart`, `stop`, `resume`, `flatten`, `show-env`, or `set-env`
   with a key and value (whitelisted keys only, never LIVE_TRADING). Output is in the job log.
 - **Watch**: the dashboard. Token is `DASHBOARD_TOKEN` in the server's `.env`
-  (`/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`). One-time link: `https://coinbase.loewenmut.ch/?token=...`.
+  (`/home/loewenmut-coinbase/htdocs/coinbase.loewenmut.ch/.env`). One-time link: `https://agent.loewenmut.ch/?token=...`.
 - **Secrets** live in GitHub → Settings → Secrets: `VPS_HOST`, `VPS_USER` (`ubuntu`), `VPS_PORT`, `VPS_SSH_KEY`.
   SSH key pair for the deploy is on the previous developer's machine; generate a new one if lost
   (`deploy/README.md` step 1–3).
@@ -100,7 +100,16 @@ They did the bulk of this build and can continue it. What works:
   edit code but cannot deploy; you push.
 - Do not let an assistant change `.env` on the server, the secrets, or anything in section 5.
 
-## 8. Known gaps and ideas, in priority order
+## 8. Naming and the trademark notice
+
+On 17 Oct 2026 Doppel, acting for Coinbase Inc., sent a takedown request for the subdomain
+`coinbase.loewenmut.ch`. We complied: the product is "Trading Agent", the dashboard lives at
+`agent.loewenmut.ch`, and the old subdomain answers 410 Gone. Never put "Coinbase" in a product
+name, domain, logo or title again; naming the exchange in descriptive text is fine. The code
+directory on the server is still under the old CloudPanel site path; that is invisible from
+outside and can be moved by the next developer (APP_DIR variable + copy of `data/`).
+
+## 9. Known gaps and ideas, in priority order
 
 1. Live broker untested against the real API (section 6, step 4).
 2. `verify-live` as a "Server command" action.
