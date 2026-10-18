@@ -13,7 +13,8 @@ on:
           - status        # account state, last cycle, STOP/FLATTEN flags, gate status
           - gate          # release-gate checks (Phase A backtest + Phase B paper run)
           - logs          # last 150 lines of the trader log
-          - events        # last 40 events from the database
+          - events        # last 40 events from the database; put a kind in "value" (e.g. control, fill, halt) to filter
+          - rotate-secrets # new random dashboard password + API token; read them on the server over SSH
           - containers    # docker compose ps + resource use
           - restart       # restart the trader container (state is restored from the database)
           - stop          # STOP: no new buys; exits keep working
@@ -71,7 +72,8 @@ jobs:
             status)     CMD="docker compose exec -T trader python -m trader status" ;;
             gate)       CMD="docker compose exec -T trader python -m trader gate --days 730 || true" ;;
             logs)       CMD="docker compose logs --tail 150 --no-color trader" ;;
-            events)     CMD="docker compose exec -T trader python -c \"from trader.store import Store; from trader.config import Settings; s=Settings.from_env(); [print(e['ts'], e['kind'], e['detail'][:200]) for e in reversed(Store(s.database).events(40))]\"" ;;
+            events)     CMD="docker compose exec -T -e KIND=$VALUE trader python -c \"import os; from trader.store import Store; from trader.config import Settings; s=Settings.from_env(); k=os.environ.get('KIND') or None; [print(e['ts'], e['kind'], e['detail'][:220]) for e in reversed(Store(s.database).events(200 if k else 40, kind=k))]\"" ;;
+            rotate-secrets) CMD="bash deploy/rotate-secrets.sh" ;;
             containers) CMD="docker compose ps && docker stats --no-stream" ;;
             restart)    CMD="docker compose restart trader && sleep 8 && docker compose logs --tail 10 --no-color trader" ;;
             stop)       CMD="docker compose exec -T trader python -m trader control stop" ;;
