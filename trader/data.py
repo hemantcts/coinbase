@@ -14,6 +14,19 @@ from .store import Store
 PUBLIC_BASE = "https://api.exchange.coinbase.com"
 GRANULARITIES = (60, 300, 900, 3600, 21600, 86400)
 MAX_CANDLES_PER_REQUEST = 300
+# Timeframes Coinbase does not serve, built by resampling the native one in brackets.
+DERIVED = {1800: 900, 7200: 3600, 14400: 3600, 43200: 21600}
+TIMEFRAME_NAMES = {60: "1m", 300: "5m", 900: "15m", 1800: "30m", 3600: "1h", 7200: "2h", 14400: "4h",
+                   21600: "6h", 43200: "12h", 86400: "1d"}
+
+
+def source_granularity(granularity: int) -> int:
+    """The native Coinbase timeframe a timeframe is read or resampled from."""
+    if granularity in GRANULARITIES:
+        return granularity
+    if granularity in DERIVED:
+        return DERIVED[granularity]
+    raise ValueError(f"Unsupported timeframe {granularity}s; use one of {sorted(set(GRANULARITIES) | set(DERIVED))}")
 
 
 class DataSource(Protocol):
@@ -45,6 +58,7 @@ class CoinbasePublic:
         self.store = store
         self.headers = {"User-Agent": user_agent, "Accept": "application/json"}
         self._specs: dict[str, ProductSpec] = {}
+        self._siblings: dict[int, CoinbasePublic] = {}
 
     def _get(self, path: str, params: dict | None = None, retries: int = 3):
         last: Exception | None = None
@@ -78,6 +92,19 @@ class CoinbasePublic:
         if self.store and closed:
             self.store.save_candles(product, self.granularity, closed)
         return closed
+
+    def closed_candles_at(self, product: str, n: int, now: datetime, granularity: int) -> list[Candle]:
+        """Last n closed candles of any supported timeframe (30m and 4h are resampled from 15m / 1h)."""
+        if granularity == self.granularity:
+            return self.closed_candles(product, n, now)
+        src = source_granularity(granularity)
+        sibling = self._siblings.get(src)
+        if sibling is None:
+            sibling = self._siblings[src] = CoinbasePublic(src, self.timeout, self.store)
+        rows = sibling.closed_candles(product, MAX_CANDLES_PER_REQUEST, now)
+        if src != granularity:
+            rows = [c for c in resample(rows, src, granularity) if c.ts + granularity <= now.timestamp()]
+        return rows[-n:]
 
     def spec(self, product: str) -> ProductSpec:
         if product in self._specs:
@@ -139,6 +166,7 @@ class StoreDataSource:
         self.granularity = granularity
         self.specs = specs or {}
         self._cache: dict[str, list[Candle]] = {}
+        self._frames: dict[tuple[str, int], list[Candle]] = {}
 
     def preload(self, product: str) -> list[Candle]:
         if product not in self._cache:
@@ -146,13 +174,31 @@ class StoreDataSource:
         return self._cache[product]
 
     def closed_candles(self, product: str, n: int, now: datetime) -> list[Candle]:
-        rows = self.preload(product)
+        return self._closed(self.preload(product), self.granularity, n, now)
+
+    def closed_candles_at(self, product: str, n: int, now: datetime, granularity: int) -> list[Candle]:
+        """Any timeframe from the cache: stored candles if present, else resampled from the native source."""
+        if granularity == self.granularity:
+            return self.closed_candles(product, n, now)
+        key = (product, granularity)
+        if key not in self._frames:
+            rows = self.store.candles(product, granularity)
+            # Not cached at this timeframe: build it from the coarsest cached timeframe that divides it.
+            for src in sorted((g for g in GRANULARITIES if g < granularity and granularity % g == 0), reverse=True):
+                if rows:
+                    break
+                rows = resample(self.store.candles(product, src), src, granularity)
+            self._frames[key] = rows
+        return self._closed(self._frames[key], granularity, n, now)
+
+    @staticmethod
+    def _closed(rows: list[Candle], granularity: int, n: int, now: datetime) -> list[Candle]:
         cutoff = now.timestamp()
         # rows are sorted by ts; binary search for the last closed candle
         lo, hi = 0, len(rows)
         while lo < hi:
             mid = (lo + hi) // 2
-            if rows[mid].ts + self.granularity <= cutoff:
+            if rows[mid].ts + granularity <= cutoff:
                 lo = mid + 1
             else:
                 hi = mid

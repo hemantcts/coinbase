@@ -18,6 +18,9 @@ Optional, off by default; the configured trendhold / BTC+ETH / client paper run 
   every 10 s; Markets table with all top-10 coins (traded or watch-only), price, state, play and reason;
   open positions show P&L %, stop-loss and take-profit.
 - `WATCH_TOP_N` (default 10): watch-only coins are scored with the same strategy but never traded.
+- `STRATEGY=mtf` with `GRANULARITY=900`: multi-timeframe trend. 1d + 6h set the direction, 1h + 30m
+  confirm momentum, a 15m close back above its EMA 20 triggers the entry; exits and the 6x ATR trailing
+  stop stay on 6h. 30m and 4h candles are resampled from 15m / 1h. Two-year backtest still to be run.
 
 ## 0.7.0 – 16 Oct 2026
 

@@ -52,6 +52,7 @@ class Engine:
         self.last_rejections: dict[str, str] = {}
         self.consecutive_errors = 0
         self.cycles = 0
+        self._frame_cache: dict[str, dict[int, list[Candle]]] = {}
         self.universe_at: datetime | None = None
 
     # ---- lifecycle --------------------------------------------------------------
@@ -131,6 +132,7 @@ class Engine:
         assert state is not None
         s = self.settings
         self.cycles += 1
+        self._frame_cache: dict[str, dict[int, list[Candle]]] = {}
         if self.mode == "backtest":
             flatten = False
             self.risk.manual_stop = False
@@ -192,7 +194,9 @@ class Engine:
             if intent:
                 self._execute(intent, now, last.ts, "EXIT", urgent=True)
             elif pos.trail_atr_k > 0:
-                new_stop = self.risk.trail_stop(pos, rows)
+                stop_g = getattr(self.strategy, "stop_granularity", 0)
+                trail_rows = self._frames(product, now).get(stop_g, rows) if stop_g else rows
+                new_stop = self.risk.trail_stop(pos, trail_rows)
                 if new_stop is not None:
                     self._log(now, "trail", {"product": product, "stop": round(new_stop, 2), "close": last.close})
 
@@ -229,7 +233,7 @@ class Engine:
                 self.store.mark_processed(product, last.ts)
                 continue
             pos = state.positions.get(product)
-            sig = self.strategy.evaluate(product, rows, pos)
+            sig = self._evaluate(product, rows, pos, now)
             self.last_signals[product] = sig
             if sig.side != Side.HOLD:
                 self._log(now, "signal", {"product": product, "side": sig.side.value, "strategy": sig.strategy,
@@ -358,6 +362,23 @@ class Engine:
                         self.store.unmark_processed(fresh.product, candle_ts)
                     self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
 
+    def _frames(self, product: str, now: datetime) -> dict[int, list[Candle]]:
+        """Higher and lower timeframes the strategy asked for, fetched once per product per cycle."""
+        if product not in self._frame_cache:
+            frames: dict[int, list[Candle]] = {}
+            for g in getattr(self.strategy, "timeframes", ()):
+                try:
+                    frames[g] = self.data.closed_candles_at(product, self.strategy.frame_history, now, g)
+                except Exception as exc:                     # noqa: BLE001  a missing frame means no signal, not a crash
+                    self._log(now, "error", {"product": product, "timeframe": g, "error": repr(exc)})
+            self._frame_cache[product] = frames
+        return self._frame_cache[product]
+
+    def _evaluate(self, product: str, rows: list[Candle], pos: Any, now: datetime) -> Signal:
+        if not getattr(self.strategy, "timeframes", ()):
+            return self.strategy.evaluate(product, rows, pos)
+        return self.strategy.evaluate(product, rows, pos, frames=self._frames(product, now))
+
     def _refresh_universe(self, now: datetime) -> None:
         """Re-rank the coins every universe_refresh_hours. PRODUCTS=auto trades them (open positions always stay
         tradeable); otherwise the top watch_top_n are only watched next to the configured products."""
@@ -402,7 +423,7 @@ class Engine:
                 continue
             if not rows:
                 continue
-            sig = self.strategy.evaluate(product, rows, None) if len(rows) >= self.strategy.warmup else \
+            sig = self._evaluate(product, rows, None, now) if len(rows) >= self.strategy.warmup else \
                 Signal.hold(product, self.strategy.name, "warmup")
             self.watch_signals[product] = (sig, rows[-1].close)
 

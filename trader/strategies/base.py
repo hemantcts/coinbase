@@ -16,6 +16,11 @@ class Strategy(ABC):
     warmup: int = 50          # candles needed before the strategy may speak
     stop_mode: str = "pct"    # "pct": fixed stop and target from the profile; "atr": trailing k*ATR stop, no target
     atr_window: int = 14
+    # Multi-timeframe strategies: extra candle sizes (seconds) the engine passes as `frames`, how many candles of
+    # each, and the timeframe the trailing ATR stop is measured on (0 = the trading timeframe).
+    timeframes: tuple[int, ...] = ()
+    frame_history: int = 150
+    stop_granularity: int = 0
 
     @abstractmethod
     def evaluate(self, product: str, candles: list[Candle], position: Position | None) -> Signal:
