@@ -20,7 +20,8 @@ Optional, off by default; the configured trendhold / BTC+ETH / client paper run 
 - `WATCH_TOP_N` (default 10): watch-only coins are scored with the same strategy but never traded.
 - `STRATEGY=mtf` with `GRANULARITY=900`: multi-timeframe trend. 1d + 6h set the direction, 1h + 30m
   confirm momentum, a 15m close back above its EMA 20 triggers the entry; exits and the 6x ATR trailing
-  stop stay on 6h. 30m and 4h candles are resampled from 15m / 1h. Two-year backtest still to be run.
+  stop stay on 6h. 30m and 4h candles are resampled from 15m / 1h. Two-year backtest on BTC+ETH:
+  +0.2 % vs trendhold +2.1 %; keep trendhold (docs/RESEARCH-2026-11-MTF.md).
 
 ## 0.7.0 – 16 Oct 2026
 
