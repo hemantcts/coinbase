@@ -132,8 +132,16 @@ class RiskController:
             return Decision(False, "total loss limit reached, trading halted")
         if state.halted_daily:
             return Decision(False, "daily loss limit reached, no new positions today")
-        if intent.product in state.positions and state.positions[intent.product].qty > 0:
-            return Decision(False, "already holding this product")
+        held = state.positions.get(intent.product)
+        dca = self._dca_mode(intent)
+        if dca and p.max_dca_levels <= 0:
+            return Decision(False, f"DCA entries are disabled in profile {p.name}")
+        if held is not None and held.qty > 0:
+            if not (dca and intent.signal.add):
+                return Decision(False, "already holding this product")
+            return self._review_dca_add(intent, state, held)
+        if intent.signal.add:
+            return Decision(False, "no position to add to")
         if state.new_positions_today >= p.max_new_positions_per_day:
             return Decision(False, f"max {p.max_new_positions_per_day} new positions per day reached")
 
@@ -144,6 +152,59 @@ class RiskController:
 
         capital = state.initial_capital
         max_position = capital * p.max_position_fraction
+        if dca:
+            max_position /= 1 + p.max_dca_levels           # first rung of the ladder only
+        sized = self._size(intent, state, max_position)
+        if isinstance(sized, Decision):
+            return sized
+        qty, fill_estimate, spec = sized
+        if dca:
+            stop = intent.price * (1 - p.dca_stop_pct)
+            take = intent.price * (1 + p.dca_take_profit_pct)
+        elif self._atr_mode(intent) and intent.signal.atr > 0:
+            stop = intent.price - p.atr_multiple * intent.signal.atr
+            take = 0.0                                   # no target: the trend decides the exit
+        else:
+            stop = intent.price * (1 - p.stop_loss_pct)
+            take = intent.price * (1 + p.take_profit_pct)
+        if spec:
+            stop, take = spec.round_price(stop), spec.round_price(take)
+        return Decision(True, "approved", qty=qty, notional=qty * fill_estimate * (1 + c.fee_rate),
+                        stop_price=max(stop, 0.0), take_profit_price=max(take, 0.0))
+
+    def _review_dca_add(self, intent: OrderIntent, state: PortfolioState, pos: Position) -> Decision:
+        """One more rung of a DCA ladder. Same caps as a new position: the whole ladder fits in max_position."""
+        p, c = self.profile, self.costs
+        required = c.round_trip * p.min_edge_multiple
+        if intent.signal.expected_move < required:
+            return Decision(False, f"expected move {intent.signal.expected_move:.3%} < required {required:.3%} after costs")
+        if pos.dca_level >= p.max_dca_levels:
+            return Decision(False, f"max {p.max_dca_levels} DCA levels reached")
+        reference = pos.last_entry_price or pos.entry_price
+        trigger = reference * (1 - p.dca_step_pct)
+        if intent.price > trigger:
+            return Decision(False, f"price {intent.price:.2f} above next DCA level {trigger:.2f}")
+        if pos.stop_price > 0 and intent.price <= pos.stop_price:
+            return Decision(False, "price at or below the hard stop, no DCA add")
+        capital = state.initial_capital
+        rung = capital * p.max_position_fraction / (1 + p.max_dca_levels)
+        coin_room = capital * p.max_position_fraction - pos.qty * pos.entry_price
+        sized = self._size(intent, state, min(rung, coin_room))
+        if isinstance(sized, Decision):
+            return sized
+        qty, fill_estimate, spec = sized
+        # The take-profit follows the new average entry; the hard stop is not touched.
+        avg = (pos.qty * pos.entry_price + qty * fill_estimate) / (pos.qty + qty)
+        take = avg * (1 + p.dca_take_profit_pct)
+        if spec:
+            take = spec.round_price(take)
+        return Decision(True, f"DCA level {pos.dca_level + 1} approved", qty=qty,
+                        notional=qty * fill_estimate * (1 + c.fee_rate), stop_price=pos.stop_price, take_profit_price=take)
+
+    def _size(self, intent: OrderIntent, state: PortfolioState, max_position: float) -> Decision | tuple[float, float, ProductSpec | None]:
+        """Budget and quantity for a buy, after every cap. Returns a refusal or (qty, fill_estimate, spec)."""
+        p, c = self.profile, self.costs
+        capital = state.initial_capital
         exposure_room = capital * p.max_exposure_fraction - state.exposure()
         reserve_room = state.cash - capital * p.min_reserve_fraction
         risk_room = capital * p.risk_per_trade_fraction / p.stop_loss_pct
@@ -162,20 +223,15 @@ class RiskController:
                 return Decision(False, f"quantity {qty} below exchange minimum {spec.base_min_size}")
             if spec.min_market_funds and qty * intent.price < spec.min_market_funds:
                 return Decision(False, f"notional below exchange minimum funds {spec.min_market_funds}")
-        if self._atr_mode(intent) and intent.signal.atr > 0:
-            stop = intent.price - p.atr_multiple * intent.signal.atr
-            take = 0.0                                   # no target: the trend decides the exit
-        else:
-            stop = intent.price * (1 - p.stop_loss_pct)
-            take = intent.price * (1 + p.take_profit_pct)
-        if spec:
-            stop, take = spec.round_price(stop), spec.round_price(take)
-        return Decision(True, "approved", qty=qty, notional=qty * fill_estimate * (1 + c.fee_rate),
-                        stop_price=max(stop, 0.0), take_profit_price=max(take, 0.0))
+        return qty, fill_estimate, spec
 
     @staticmethod
     def _atr_mode(intent: OrderIntent) -> bool:
         return getattr(intent, "stop_mode", "pct") == "atr"
+
+    @staticmethod
+    def _dca_mode(intent: OrderIntent) -> bool:
+        return getattr(intent, "stop_mode", "pct") == "dca"
 
     # ---- external evidence ---------------------------------------------------
 

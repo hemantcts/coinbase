@@ -18,6 +18,7 @@ from .notify import Notifier
 from .risk import RiskController
 from .store import Store
 from .strategies import ALL, build
+from . import universe
 
 
 def _date(s: str) -> datetime:
@@ -43,6 +44,20 @@ def cmd_profiles(settings: Settings, args: argparse.Namespace) -> int:
     print(format_table(rows))
     pp = pilot_profile(settings.profile)
     print(f"\nLive pilot caps on '{settings.profile.name}': max position {pp.max_position_fraction*cap:.0f}, max invested {pp.max_exposure_fraction*cap:.0f} {settings.report_currency}")
+    return 0
+
+
+def cmd_top_coins(settings: Settings, args: argparse.Namespace) -> int:
+    public = CoinbasePublic(86400)
+    print(f"Ranking tradeable {settings.quote_currency} products on Coinbase (public data, takes ~30 s)...")
+    coins = universe.discover(public, settings.quote_currency, args.n or settings.top_n, progress=True)
+    print(format_table([{"#": i + 1, "product": c.product, "score": c.score, "30d_vol_M": round(c.volume_30d_quote / 1e6, 1),
+                         "ATR_%/day": round(100 * c.atr_pct, 1), "above_EMA50": c.above_ema50,
+                         "30d_%": round(100 * c.change_30d, 1), "days": c.days_history} for i, c in enumerate(coins)]))
+    if args.write:
+        universe.save(settings.universe_file, coins)
+        print(f"written {settings.universe_file}")
+    print("\nPRODUCTS=" + ",".join(c.product for c in coins))
     return 0
 
 
@@ -306,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("profiles", help="show the risk profiles in money terms")
+    s = sub.add_parser("top-coins", help="rank Coinbase products by liquidity, volatility and trend")
+    s.add_argument("-n", type=int, help="how many (default TOP_N, 10)")
+    s.add_argument("--write", action="store_true", help="save the list to data/universe.json")
     s = sub.add_parser("fetch-history", help="cache historical candles for backtests")
     s.add_argument("--days", type=int, default=120)
     s.add_argument("--products", nargs="*")
@@ -348,7 +366,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     settings = Settings.from_env()
     handlers = {
-        "profiles": cmd_profiles, "fetch-history": cmd_fetch_history, "backtest": cmd_backtest, "gate": cmd_gate,
+        "profiles": cmd_profiles, "top-coins": cmd_top_coins, "fetch-history": cmd_fetch_history, "backtest": cmd_backtest, "gate": cmd_gate,
         "paper": cmd_paper, "live": cmd_live, "verify-live": cmd_verify_live, "status": cmd_status,
         "dashboard": cmd_dashboard, "control": cmd_control,
         "export-history": cmd_export_history, "import-history": cmd_import_history, "events": cmd_events,

@@ -218,7 +218,7 @@ def create_app(settings: Settings) -> FastAPI:
             "mode": store.get_meta("mode", "paper"),
             "strategy": store.get_meta("strategy", settings.strategy),
             "profile": store.get_meta("risk_profile", settings.risk_profile),
-            "products": settings.products,
+            "products": (store.get_meta("products") or "").split(",") if store.get_meta("products") else settings.products,
             "quote_currency": settings.quote_currency,
             "report_currency": settings.report_currency,
             "starting_capital_report": settings.starting_capital_report,

@@ -50,6 +50,7 @@ class Engine:
         self.last_rejections: dict[str, str] = {}
         self.consecutive_errors = 0
         self.cycles = 0
+        self.universe_at: datetime | None = None
 
     # ---- lifecycle --------------------------------------------------------------
 
@@ -137,6 +138,9 @@ class Engine:
 
         if self.mode == "live":
             self._reconcile_open_orders(now)
+
+        if s.auto_products and self.mode != "backtest":
+            self._refresh_universe(now)
 
         if self.mode != "backtest":
             before = self.risk.severe_event
@@ -229,9 +233,13 @@ class Engine:
                 self._log(now, "signal", {"product": product, "side": sig.side.value, "strategy": sig.strategy,
                                           "confidence": sig.confidence, "expected_move": sig.expected_move,
                                           "reason": sig.reason, "candle": last.ts, "price": last.close})
-            if sig.side == Side.BUY and pos is None:
-                self._execute(OrderIntent(product, Side.BUY, last.close, sig, sig.reason, stop_mode=self.strategy.stop_mode),
+            stop_mode = sig.stop_mode or self.strategy.stop_mode
+            if sig.side == Side.BUY and pos is None and not sig.add:
+                self._execute(OrderIntent(product, Side.BUY, last.close, sig, sig.reason, stop_mode=stop_mode),
                               now, last.ts, "BUY")
+            elif sig.side == Side.BUY and pos is not None and sig.add:
+                self._execute(OrderIntent(product, Side.BUY, last.close, sig, sig.reason, stop_mode=stop_mode),
+                              now, last.ts, f"DCA{pos.dca_level + 1}")
             elif sig.side == Side.SELL and pos is not None:
                 self._execute(OrderIntent(product, Side.SELL, last.close, sig, sig.reason), now, last.ts, "SELL")
             self.store.mark_processed(product, last.ts)
@@ -340,6 +348,33 @@ class Engine:
                     if candle_ts is not None:
                         self.store.unmark_processed(fresh.product, candle_ts)
                     self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
+
+    def _refresh_universe(self, now: datetime) -> None:
+        """PRODUCTS=auto: re-rank the coins every universe_refresh_hours. Open positions always stay tradeable."""
+        from . import universe
+        s = self.settings
+        if self.universe_at is not None and (now - self.universe_at).total_seconds() < s.universe_refresh_hours * 3600:
+            return
+        self.universe_at = now
+        held = list(self.state.positions) if self.state else []
+        products = universe.resolve(self.data, s.universe_file, s.quote_currency, s.top_n, s.products, keep=held,
+                                    log=self._print)
+        spec_source = getattr(self.broker, "spec", None) or self.data.spec
+        usable = []
+        for p in products:
+            if p not in self.risk.specs:
+                try:
+                    self.risk.specs[p] = spec_source(p)
+                except Exception as exc:                     # noqa: BLE001  a coin we can't size is a coin we skip
+                    self._log(now, "error", {"product": p, "spec": repr(exc)})
+                    if p not in held:
+                        continue
+            usable.append(p)
+        if usable != s.products:
+            self._log(now, "universe", {"products": usable, "added": [p for p in usable if p not in s.products],
+                                        "removed": [p for p in s.products if p not in usable]})
+        s.products = usable
+        self.store.set_meta("products", ",".join(usable))
 
     def _load_evidence(self, now: datetime) -> list[Evidence]:
         """data/evidence.json: a list of Evidence objects maintained by a human or a future pipeline."""
