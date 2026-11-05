@@ -21,6 +21,11 @@ def apply_fill(state: PortfolioState, order: Order, decision: Decision | None = 
             existing.entry_price = (existing.entry_price * existing.qty + price * qty) / total
             existing.qty = total
             existing.entry_fee += fee
+            existing.dca_level += 1
+            existing.last_entry_price = price
+            # A DCA add moves the take-profit with the average entry; the hard stop stays where it was.
+            if decision is not None and decision.take_profit_price > 0:
+                existing.take_profit_price = decision.take_profit_price
         else:
             state.positions[order.product] = Position(
                 product=order.product, qty=qty, entry_price=price, entry_ts=order.updated_at or order.created_at,
@@ -30,6 +35,7 @@ def apply_fill(state: PortfolioState, order: Order, decision: Decision | None = 
                 entry_fee=fee,
                 trail_atr_k=trail_atr_k,
                 atr_window=atr_window,
+                last_entry_price=price,
             )
             state.new_positions_today += 1
         return 0.0

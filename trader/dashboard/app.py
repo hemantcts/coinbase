@@ -19,6 +19,7 @@ from ..config import Settings
 from ..gate import gate_status
 from ..models import utcnow
 from ..store import Store
+from .overview import overview
 
 TEMPLATE = Path(__file__).with_name("index.html")
 LOGIN_TEMPLATE = Path(__file__).with_name("login.html")
@@ -218,7 +219,7 @@ def create_app(settings: Settings) -> FastAPI:
             "mode": store.get_meta("mode", "paper"),
             "strategy": store.get_meta("strategy", settings.strategy),
             "profile": store.get_meta("risk_profile", settings.risk_profile),
-            "products": settings.products,
+            "products": (store.get_meta("products") or "").split(",") if store.get_meta("products") else settings.products,
             "quote_currency": settings.quote_currency,
             "report_currency": settings.report_currency,
             "starting_capital_report": settings.starting_capital_report,
@@ -247,6 +248,7 @@ def create_app(settings: Settings) -> FastAPI:
             "last_signals": json.loads(store.get_meta("last_signals") or "{}"),
             "state": st.to_dict() if st else None,
         }
+        d["bot"] = overview(store, settings, st, d["health"], d["data_quality"]["ok"], now)
         if st and st.fx_rate:
             d["report"] = {
                 "fx_rate": st.fx_rate, "fx_rate_ts": st.fx_rate_ts,

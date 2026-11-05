@@ -36,6 +36,15 @@ class RiskProfile:
     max_peak_drawdown: float = 0.0
     # Minimum order notional in quote currency
     min_order_notional: float = 10.0
+    # DCA ladder for entries with stop_mode "dca". 0 levels = DCA disabled (adds are refused).
+    # The first entry and every add each get max_position / (1 + max_dca_levels), so the whole ladder
+    # never exceeds max_position_fraction. An add needs the price dca_step_pct below the previous entry.
+    # The hard stop sits dca_stop_pct below the first entry and never moves; the take-profit is
+    # dca_take_profit_pct above the average entry and moves down with each add.
+    max_dca_levels: int = 0
+    dca_step_pct: float = 0.0
+    dca_stop_pct: float = 0.0
+    dca_take_profit_pct: float = 0.0
 
     def amounts(self, capital: float) -> dict[str, float]:
         """Translate the fractions into money for display."""
@@ -116,6 +125,19 @@ PROFILES["client"] = RiskProfile(
     max_peak_drawdown=0.08,
 )
 
+# The client's limits unchanged, plus a DCA ladder for the adaptive strategy: 1 entry + 3 adds of 2.5 %
+# each (10 % per coin in total), adds every 5 % lower, hard stop 18 % below the first entry, take-profit
+# 6 % above the average entry. Worst case per coin at the stop, all levels filled, fees included, is about
+# 1.5 % of capital; three coins at once (the 30 % exposure cap) about 4.5 %, inside the 8 % total-loss limit.
+PROFILES["client-dca"] = replace(
+    PROFILES["client"],
+    name="client-dca",
+    max_dca_levels=3,
+    dca_step_pct=0.05,
+    dca_stop_pct=0.18,
+    dca_take_profit_pct=0.06,
+)
+
 # Phase C pilot: real money, but capped at CHF 100 per position and CHF 200 total
 # on a CHF 1'000 account, until the first live results are reviewed.
 PILOT_CAPS = {"max_position_fraction": 0.10, "max_exposure_fraction": 0.20}
@@ -158,6 +180,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
 @dataclass
 class Settings:
     products: list[str] = field(default_factory=lambda: ["BTC-EUR", "ETH-EUR"])
+    auto_products: bool = False          # PRODUCTS=auto: trade the top_n coins from trader/universe.py instead
+    top_n: int = 10
+    universe_refresh_hours: int = 24     # re-rank the coins this often; held coins always stay in the list
+    watch_top_n: int = 10                # without PRODUCTS=auto: score this many top coins for the dashboard, never trade them; 0 = off
     quote_currency: str = "EUR"          # what the pairs settle in
     report_currency: str = "CHF"         # what the owner thinks in
     starting_capital_report: float = 1000.0  # in report currency
@@ -210,10 +236,21 @@ class Settings:
     def gate_file(self) -> Path:
         return self.data_dir / "gate_result.json"
 
+    @property
+    def universe_file(self) -> Path:
+        return self.data_dir / "universe.json"
+
     @classmethod
     def from_env(cls) -> "Settings":
         s = cls()
-        s.products = [p.strip().upper() for p in os.getenv("PRODUCTS", ",".join(s.products)).split(",") if p.strip()]
+        raw_products = os.getenv("PRODUCTS", ",".join(s.products))
+        if raw_products.strip().lower() == "auto":
+            s.auto_products = True             # resolved at engine start; BTC/ETH until then
+        else:
+            s.products = [p.strip().upper() for p in raw_products.split(",") if p.strip()]
+        s.top_n = int(os.getenv("TOP_N", s.top_n))
+        s.universe_refresh_hours = int(os.getenv("UNIVERSE_REFRESH_HOURS", s.universe_refresh_hours))
+        s.watch_top_n = int(os.getenv("WATCH_TOP_N", s.watch_top_n))
         s.quote_currency = os.getenv("QUOTE_CURRENCY", s.quote_currency).upper()
         s.report_currency = os.getenv("REPORT_CURRENCY", s.report_currency).upper()
         s.starting_capital_report = float(os.getenv("STARTING_CAPITAL", s.starting_capital_report))

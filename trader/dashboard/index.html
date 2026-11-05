@@ -90,6 +90,26 @@
   .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 13.5px; box-shadow: var(--shadow); display: none; z-index: 10; }
   .banner { grid-column: span 12; border-radius: 12px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--text); display: none; }
   .card h2 { flex-wrap: wrap; }
+  .status { display: grid; grid-template-columns: minmax(260px, 1.1fr) 2fr; gap: 16px; align-items: stretch; }
+  @media (max-width: 900px) { .status { grid-template-columns: 1fr; } }
+  .light { border-radius: 12px; padding: 16px 18px; border: 1px solid var(--line); background: var(--panel-2); display: flex; flex-direction: column; gap: 6px; }
+  .light .big { display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 800; letter-spacing: .02em; line-height: 1.1; }
+  .light .lamp { width: 18px; height: 18px; border-radius: 50%; background: currentColor; flex: none; }
+  .light.run { color: var(--up); border-color: color-mix(in srgb, var(--up) 45%, transparent); background: color-mix(in srgb, var(--up) 9%, var(--panel-2)); }
+  .light.pause { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 10%, var(--panel-2)); }
+  .light.stop { color: var(--down); border-color: color-mix(in srgb, var(--down) 50%, transparent); background: color-mix(in srgb, var(--down) 10%, var(--panel-2)); }
+  .light.run .lamp { animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); } 50% { box-shadow: 0 0 0 8px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .light.run .lamp { animation: none; } }
+  .light .msg { color: var(--text); font-size: 15px; font-weight: 600; }
+  .light .why { color: var(--muted); font-size: 13px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); }
+  .badge.ok { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+  .badge.info { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  .badge.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .badge.bad { color: var(--down); border-color: color-mix(in srgb, var(--down) 40%, transparent); }
+  td.wrap { white-space: normal; min-width: 220px; color: var(--muted); font-size: 13px; }
   @media (max-width: 760px) { header { position: static; } .right { margin-left: 0; width: 100%; justify-content: space-between; } }
   @media (max-width: 640px) { main { padding: 12px; gap: 12px; } .bar { padding: 10px 12px; } .card { padding: 14px; } .stat .v.big { font-size: 28px; } .controls { grid-template-columns: 1fr; } }
 </style>
@@ -117,6 +137,14 @@
   <div class="banner" id="banner"></div>
 
   <section class="card">
+    <h2><span data-i="botstatus">Bot status</span><span class="sub" id="updated"></span></h2>
+    <div class="status">
+      <div class="light" id="light"><div class="big"><span class="lamp"></span><span id="st-word">…</span></div><div class="msg" id="st-msg"></div><div class="why" id="st-why"></div></div>
+      <div class="facts" id="facts"></div>
+    </div>
+  </section>
+
+  <section class="card">
     <h2><span data-i="portfolio">Portfolio</span><span class="sub" id="fxnote"></span></h2>
     <div class="hero">
       <div class="stat"><div class="l" id="l-eq-rep">Equity (CHF)</div><div class="v big" id="v-eq-rep">–</div><div class="s" id="s-eq-rep"></div></div>
@@ -127,14 +155,14 @@
     <div class="grid3" style="margin-top:12px" id="minis"></div>
   </section>
 
-  <section class="card span8">
+  <section class="card">
     <h2><span data-i="equity">Equity</span><span class="sub" id="eqrange"></span></h2>
     <div class="chartwrap"><canvas id="chart"></canvas><div class="tip" id="tip"></div></div>
   </section>
 
-  <section class="card span4">
-    <h2 data-i="whatnow">What the bot is doing</h2>
-    <div class="explain" id="explain"></div>
+  <section class="card">
+    <h2><span data-i="markets">Markets</span><span class="sub" id="markets-sub"></span></h2>
+    <div class="scroll" style="max-height:none"><table id="markets"></table></div>
     <div class="note" id="explain-note"></div>
   </section>
 
@@ -205,6 +233,18 @@ const I18N = {
     done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
     live_banner: "ECHTGELD-MODUS. Jede Ausführung ist ein echter Börsenauftrag.",
     dateloc: "de-CH",
+    botstatus: "Status des Agenten", markets: "Märkte",
+    st_word: { RUNNING: "LÄUFT", PAUSED: "PAUSIERT", STOPPED: "GESTOPPT" },
+    st_msg: { monitoring: (n, w) => `Beobachtet ${n} Märkte${w ? ` und ${w} weitere` : ""} – wartet auf ein Kaufsignal`, in_trade: n => `Verwaltet ${n} offene${n === 1 ? "n Trade" : " Trades"}, prüft die übrigen Märkte`, executing: n => `Führt ${n} Auftrag${n === 1 ? "" : "e"} aus`, stopped: "Der Agent arbeitet nicht", paused: (n, w) => `Beobachtet ${n + w} Märkte – neue Käufe gesperrt` },
+    st_why: { ok: "Alles in Ordnung: Daten aktuell, keine Sperre, keine Fehler.", never_ran: "Der Agent hat noch nie einen Zyklus gemeldet. Ist er gestartet?", no_recent_cycle: m => `Letzter Zyklus vor ${m} min – Server prüfen.`, flatten: "ALLES VERKAUFEN angefordert: Positionen werden geschlossen, danach STOP.", manual_stop: "STOP aktiv: keine neuen Käufe. Verkäufe, Stop-Loss und Gewinnmitnahmen laufen weiter.", halt_total: "Gesamtverlustgrenze erreicht: keine neuen Käufe bis zur Freigabe.", halt_daily: "Tagesverlustgrenze erreicht: keine neuen Käufe bis morgen (UTC).", severe_event: "Schweres verifiziertes Ereignis: keine neuen Käufe.", stale_data: "Kursdaten veraltet: keine neuen Käufe, bis wieder aktuelle Daten kommen." },
+    f_strategy: "Strategie", f_completed: "Abgeschlossene Trades", f_active: "Aktive Trades", f_pending: "Offene Aufträge", f_lastsig: "Letztes Signal", f_lastact: "Letzte Aktivität", f_nextcheck: "Nächste Kerze", f_markets: "Märkte",
+    traded_watched: (n, w) => `${n} gehandelt · ${w} beobachtet`, ago: s => s < 60 ? `vor ${s} s` : s < 3600 ? `vor ${Math.round(s / 60)} min` : s < 86400 ? `vor ${Math.round(s / 3600)} h` : `vor ${Math.round(s / 86400)} T`, in_: s => s < 3600 ? `in ${Math.max(1, Math.round(s / 60))} min` : `in ${Math.round(s / 3600)} h`,
+    updated: s => `aktualisiert ${s}`, nosignal: "noch keines",
+    plays: { "trendhold": "Trend-Hold", "adaptive": "Adaptiv", "adaptive:trend": "Trend", "adaptive:swing": "Swing", "adaptive:dca": "DCA", "risk": "Risiko-Ausstieg", "manual": "Manuell" },
+    mk: { rank: "#", mode: "Modus", state: "Zustand", play: "Spielart", signal: "Signal / Grund", pnl: "G/V" },
+    mk_mode: { true: "handelt", false: "beobachtet" }, mk_state: { in: "im Trade", buy: "Kaufsignal", sell: "Verkaufssignal", wait: "wartet" },
+    markets_sub: t => t ? `Top-Liste vom ${t}` : "",
+    th_pnlpct: "G/V %", th_sl: "Stop-Loss (SL)", th_tp: "Take-Profit (TP)",
   },
   en: {
     portfolio: "Portfolio", equity: "Equity", whatnow: "What the bot is doing", positions: "Open positions",
@@ -237,6 +277,18 @@ const I18N = {
     done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
     live_banner: "LIVE MODE. Every fill is a real exchange order.",
     dateloc: "en-GB",
+    botstatus: "Bot status", markets: "Markets",
+    st_word: { RUNNING: "RUNNING", PAUSED: "PAUSED", STOPPED: "STOPPED" },
+    st_msg: { monitoring: (n, w) => `Monitoring ${n} market${n === 1 ? "" : "s"}${w ? ` and watching ${w} more` : ""} – waiting for a buy signal`, in_trade: n => `Managing ${n} open trade${n === 1 ? "" : "s"}, scanning the other markets`, executing: n => `Executing ${n} order${n === 1 ? "" : "s"}`, stopped: "The bot is not working", paused: (n, w) => `Monitoring ${n + w} markets – new buys blocked` },
+    st_why: { ok: "All good: market data current, no halt, no errors.", never_ran: "The bot has never reported a cycle. Has it been started?", no_recent_cycle: m => `Last cycle ${m} min ago – check the server.`, flatten: "FLATTEN requested: positions are being closed, then STOP.", manual_stop: "STOP is active: no new buys. Exits, stop-loss and take-profit keep working.", halt_total: "Total loss limit reached: no new buys until released.", halt_daily: "Daily loss limit reached: no new buys until tomorrow (UTC).", severe_event: "Verified severe event: no new buys.", stale_data: "Market data is stale: no new buys until fresh data arrives." },
+    f_strategy: "Strategy", f_completed: "Completed trades", f_active: "Active trades", f_pending: "Pending orders", f_lastsig: "Last signal", f_lastact: "Last activity", f_nextcheck: "Next candle", f_markets: "Markets",
+    traded_watched: (n, w) => `${n} traded · ${w} watched`, ago: s => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`, in_: s => s < 3600 ? `in ${Math.max(1, Math.round(s / 60))} min` : `in ${Math.round(s / 3600)} h`,
+    updated: s => `updated ${s}`, nosignal: "none yet",
+    plays: { "trendhold": "Trend-hold", "adaptive": "Adaptive", "adaptive:trend": "Trend", "adaptive:swing": "Swing", "adaptive:dca": "DCA", "risk": "Risk exit", "manual": "Manual" },
+    mk: { rank: "#", mode: "Mode", state: "State", play: "Play", signal: "Signal / reason", pnl: "P&L" },
+    mk_mode: { true: "trading", false: "watching" }, mk_state: { in: "in trade", buy: "buy signal", sell: "sell signal", wait: "waiting" },
+    markets_sub: t => t ? `top list of ${t}` : "",
+    th_pnlpct: "P&L %", th_sl: "Stop-loss (SL)", th_tp: "Take-profit (TP)",
   }
 };
 const $ = id => document.getElementById(id);
@@ -283,6 +335,31 @@ function drawChart() {
   cv.onmousemove = e => { const r = cv.getBoundingClientRect(); const i = Math.max(0, Math.min(pts.length - 1, Math.round((e.clientX - r.left - L) / (W - L - R) * (pts.length - 1)))); const p = pts[i]; const tip = $('tip'); tip.style.display = 'block'; tip.textContent = `${dt(p.ts)}  ${fmt(p.equity)}`; tip.style.left = Math.min(W - 180, Math.max(0, x(i) + 10)) + 'px'; tip.style.top = Math.max(0, y(p.equity) - 34) + 'px'; };
   cv.onmouseleave = () => $('tip').style.display = 'none';
 }
+function playName(p) { return p ? (T().plays[p] || p) : '–'; }
+const ago = ts => ts ? T().ago(Math.max(0, Math.round((Date.now() - new Date(ts)) / 1000))) : '–';
+let LAST_OK = null, LAST_STATE = null;
+function renderStatus(s) {
+  const t = T(), b = s.bot; if (!b) return; LAST_STATE = s;
+  const cls = { RUNNING: 'run', PAUSED: 'pause', STOPPED: 'stop' }[b.status];
+  $('light').className = 'light ' + cls; $('st-word').textContent = t.st_word[b.status];
+  const c = b.counts;
+  $('st-msg').textContent = ({ monitoring: b.status === 'PAUSED' ? t.st_msg.paused(c.markets, c.watched) : t.st_msg.monitoring(c.markets, c.watched), in_trade: t.st_msg.in_trade(c.active), executing: t.st_msg.executing(c.pending), stopped: t.st_msg.stopped })[b.activity];
+  const why = t.st_why[b.status_reason]; const mins = s.health.last_cycle_at ? Math.round((Date.now() - new Date(s.health.last_cycle_at)) / 60000) : 0;
+  $('st-why').textContent = typeof why === 'function' ? why(mins) : why;
+  const g = s.granularity || 21600, nowS = Date.now() / 1000, next = (Math.floor(nowS / g) + 1) * g - nowS;
+  const ls = b.last_signal;
+  const sigTxt = ls ? `${t.sides[ls.side] || ls.side} ${ls.product} · ${playName(ls.strategy)}` : t.nosignal;
+  const strat = playName(s.strategy) + (b.active_plays.length ? ' · ' + b.active_plays.map(playName).join(', ') : '');
+  $('facts').innerHTML = [
+    [t.f_strategy, strat, '', s.profile],
+    [t.f_markets, c.markets + c.watched, '', t.traded_watched(c.markets, c.watched)],
+    [t.f_active, c.active, c.active ? 'up' : '', ''], [t.f_pending, c.pending, c.pending ? 'warnc' : '', ''], [t.f_completed, c.completed, '', ''],
+    [t.f_lastsig, sigTxt, ls ? (ls.side === 'BUY' ? 'up' : 'down') : '', ls ? ago(ls.ts) : ''],
+    [t.f_lastact, ago(b.last_activity_at), b.status === 'STOPPED' ? 'down' : '', dt(b.last_activity_at)],
+    [t.f_nextcheck, b.status === 'STOPPED' ? '–' : t.in_(next), '', `${Math.round(g / 3600)} h`],
+  ].map(([l, v, cl, sub]) => `<div class="mini"><div class="l">${l}</div><div class="v ${cl}">${v}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`).join('');
+}
+setInterval(() => { if (LAST_OK) $('updated').textContent = T().updated(ago(LAST_OK)); if (LAST_STATE) renderStatus(LAST_STATE); }, 1000);
 function reasonText(r) { const m = T().reasons; for (const k in m) if ((r || '').startsWith(k)) return m[k]; return r || ''; }
 async function refresh() {
   const t = T();
@@ -295,6 +372,7 @@ async function refresh() {
     document.querySelector('[data-i="controls-note"]').textContent = viewer ? t.viewer_note : t['controls-note'];
     pill('p-mode', s.mode === 'live' ? 'warn' : 'info', `${t.mode[s.mode] || s.mode} · ${s.strategy} · ${s.profile}`);
     pill('p-engine', h.stale ? 'bad' : 'ok', h.stale ? t.engine_stale : t.engine_ok);
+    if (s.bot) renderStatus(s);
     pill('p-trading', h.flatten_pending ? 'warn' : (h.manual_stop ? 'warn' : 'ok'), h.flatten_pending ? t.flatten : (h.manual_stop ? t.stop : t.trading_on));
     pill('p-gate', h.gate_passed ? 'ok' : '', h.gate_passed ? t.gate_ok : t.gate_no); $('p-gate').title = h.gate_message || '';
     $('meta').textContent = `${t.lastcycle} ${dt(h.last_cycle_at)} · ${t.errors} ${h.consecutive_errors}`;
@@ -316,20 +394,31 @@ async function refresh() {
       [t.dataq, dq.age_seconds >= 0 ? (dq.ok ? t.data_ok : t.data_stale) + ' · ' + t.data_age(Math.round(dq.age_seconds / 60)) : '–', dq.ok ? 'up' : 'down'], [t.started, dt(s.started_at)],
     ].map(([l, v, c]) => `<div class="mini"><div class="l">${l}</div><div class="v ${c || ''}">${v}</div></div>`).join('');
     $('fxnote').textContent = r ? t.fxnote(rep, q, fmt(r.fx_rate, 4), dt(r.fx_rate_ts)) : '';
-    const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee }; });
-    table('positions', pos, [{ h: t.th.product, f: r => r.product }, { h: t.th.qty, f: r => fmt(r.qty, 6), num: 1 }, { h: t.th.entry, f: r => fmt(r.entry_price), num: 1 }, { h: t.th.last, f: r => fmt(r.last), num: 1 },
-      { h: t.th.upnl, f: r => fmt(r.upnl), num: 1, cls: r => r.upnl >= 0 ? 'up' : 'down' }, { h: t.th.stop, f: r => r.stop_price ? fmt(r.stop_price) : '–', num: 1 }, { h: t.th.target, f: r => r.take_profit_price ? fmt(r.take_profit_price) : '–', num: 1 }, { h: t.th.strategy, f: r => r.strategy }]);
+    const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee, upct: (last / p.entry_price - 1) * 100 }; });
+    table('positions', pos, [{ h: t.th.product, f: r => `<b>${r.product}</b>` }, { h: t.th.strategy, f: r => playName(r.strategy) + (r.dca_level ? ` · L${r.dca_level + 1}` : '') }, { h: t.th.qty, f: r => fmt(r.qty, 6), num: 1 }, { h: t.th.entry, f: r => fmt(r.entry_price), num: 1 }, { h: t.th.last, f: r => fmt(r.last), num: 1 },
+      { h: t.th.upnl, f: r => fmt(r.upnl), num: 1, cls: r => r.upnl >= 0 ? 'up' : 'down' }, { h: t.th_pnlpct, f: r => pct(r.upct), num: 1, cls: r => r.upct >= 0 ? 'up' : 'down' },
+      { h: t.th_sl, f: r => r.stop_price ? fmt(r.stop_price) : '–', num: 1, cls: () => 'down' }, { h: t.th_tp, f: r => r.take_profit_price ? fmt(r.take_profit_price) : (r.trail_atr_k ? '↗ trail' : '–'), num: 1, cls: () => 'up' }]);
+    renderStatus(s);
     table('limits', Object.entries(s.limits || {}).map(([k, v]) => ({ k, v })), [{ h: t.th.limit, f: r => t.limits_k[r.k] || r.k }, { h: rep, f: r => fmt(r.v), num: 1 }]);
-    const sig = s.last_signals || {}; const ex = $('explain'); const hours = Math.round((s.granularity || 21600) / 3600);
-    const items = (s.products || []).map(p => { const g = sig[p]; const held = st.positions && st.positions[p]; const head = held ? t.holding : t.waiting; const reason = g ? reasonText(g.reason) : (held ? '' : t.noposition); const side = g ? t.sides[g.side] || g.side : ''; return `<div class="sig"><b>${p}</b><div><div>${head}${side && g.side !== 'HOLD' ? ' · ' + side : ''}</div><div class="r">${reason}${g && g.price ? ' · ' + fmt(g.price) + ' ' + q : ''}</div></div></div>`; });
-    ex.innerHTML = items.join('') || `<div class="empty">${t.noposition}</div>`;
-    $('explain-note').textContent = t.explain_note(hours, 20, 100);
+    const hours = Math.round((s.granularity || 21600) / 3600);
+    const bot = s.bot || { coins: [] };
+    $('markets-sub').textContent = t.markets_sub(bot.universe_ts ? dt(bot.universe_ts) : '');
+    table('markets', bot.coins, [
+      { h: t.mk.rank, f: r => r.rank ?? '–', num: 1 }, { h: t.th.product, f: r => `<b>${r.product}</b>` },
+      { h: t.mk.mode, f: r => `<span class="badge ${r.traded ? 'info' : ''}">${t.mk_mode[r.traded]}</span>` },
+      { h: t.th.price + ` (${q})`, f: r => fmt(r.price, r.price && r.price < 10 ? 4 : 2), num: 1 },
+      { h: t.mk.state, f: r => { const k = r.in_trade ? 'in' : r.side === 'BUY' ? 'buy' : r.side === 'SELL' ? 'sell' : 'wait'; return `<span class="badge ${({ in: 'ok', buy: 'ok', sell: 'bad', wait: '' })[k]}">${t.mk_state[k]}</span>`; } },
+      { h: t.mk.play, f: r => playName(r.play) },
+      { h: t.mk.pnl, f: r => r.pnl == null ? '–' : `${fmt(r.pnl)} (${pct(r.pnl_pct * 100)})`, num: 1, cls: r => r.pnl == null ? '' : r.pnl >= 0 ? 'up' : 'down' },
+      { h: t.mk.signal, f: r => reasonText(r.reason) || '–', cls: () => 'wrap' }]);
+    $('explain-note').textContent = s.strategy === 'trendhold' ? t.explain_note(hours, 20, 100) : '';
     const eq = await api('/api/equity?limit=3000'); CURVE = eq; INITIAL = st.initial_capital || 0; drawChart();
     $('eqrange').textContent = eq.length ? `${dt(eq[0].ts)} – ${dt(eq[eq.length - 1].ts)} · ${q}` : '';
     const orders = await api('/api/orders?limit=100');
     table('orders', orders, [{ h: t.th.time, f: r => dt(r.updated_at) }, { h: t.th.side, f: r => `<span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${t.sides[r.side] || r.side}</span>` }, { h: t.th.product, f: r => r.product },
       { h: t.th.qty, f: r => fmt(r.filled_qty || r.qty, 6), num: 1 }, { h: t.th.price, f: r => fmt(r.avg_fill_price || r.price), num: 1 }, { h: t.th.fee, f: r => fmt(r.fee, 4), num: 1 },
       { h: t.th.pnl, f: r => r.pnl == null ? '–' : fmt(r.pnl), num: 1, cls: r => r.pnl >= 0 ? 'up' : 'down' }, { h: t.th.status, f: r => t.status[r.status] || r.status }, { h: t.th.strategy, f: r => r.strategy }, { h: t.th.reason, f: r => r.reason }]);
+    LAST_OK = new Date().toISOString();
     const ev = await api('/api/events?limit=150');
     table('events', ev, [{ h: t.th.time, f: r => dt(r.ts) }, { h: t.th.kind, f: r => t.kinds[r.kind] || r.kind, cls: r => ({ halt: 'down', error: 'down', fill: 'up', order_rejected: 'warnc' })[r.kind] || '' }, { h: t.th.detail, f: r => r.detail.length > 170 ? r.detail.slice(0, 170) + '…' : r.detail }]);
   } catch (e) {
@@ -354,7 +443,7 @@ try { const th = localStorage.getItem('theme'); if (th) document.documentElement
 try { const u = new URL(location.href); const qt = cleanToken(u.searchParams.get('token')); if (qt) { localStorage.setItem('token', qt); u.searchParams.delete('token'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } } catch (e) {}
 $('token').value = localStorage.getItem('token') || '';
 setLang(LANG);
-setInterval(refresh, 30000);
+setInterval(refresh, 10000);
 </script>
 </body>
 </html>

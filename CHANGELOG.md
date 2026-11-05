@@ -2,6 +2,23 @@
 
 Version numbers follow the client's development plan of 16 Oct 2026 (0.3 … 1.0).
 
+## Unreleased – 5 Nov 2026
+
+Optional, off by default; the configured trendhold / BTC+ETH / client paper run is unchanged.
+
+- `trader top-coins` and `PRODUCTS=auto`: top-N Coinbase coins by liquidity, volatility and trend,
+  re-ranked daily; coins with an open position stay until sold.
+- `STRATEGY=adaptive`: per-coin regime switching between trend, swing pullback, DCA ladder and cash.
+- `RISK_PROFILE=client-dca`: client limits plus a risk-controlled DCA ladder (max 3 adds, whole ladder
+  within the 10 % per-coin cap, hard stop, take-profit follows the average entry).
+- Two-year backtest: adaptive on BTC+ETH +2.6 % (trendhold +2.1 %); on the top 10 both lose about 15 %.
+  See docs/RESEARCH-2026-11-ADAPTIVE.md before enabling.
+- Dashboard: bot status panel (RUNNING / PAUSED / STOPPED with the reason, what it is doing now,
+  strategy, completed / active / pending trades, last signal, last activity, next candle), refreshing
+  every 10 s; Markets table with all top-10 coins (traded or watch-only), price, state, play and reason;
+  open positions show P&L %, stop-loss and take-profit.
+- `WATCH_TOP_N` (default 10): watch-only coins are scored with the same strategy but never traded.
+
 ## 0.7.0 – 16 Oct 2026
 
 Maps to plan phases 0.3, 0.5, 0.6 and the start of 0.7.

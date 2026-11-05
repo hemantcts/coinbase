@@ -1,3 +1,4 @@
+from .adaptive import Adaptive
 from .base import Strategy
 from .ensemble import Ensemble
 from .mean_reversion import MeanReversion
@@ -7,6 +8,7 @@ from .trendhold import TrendHold
 
 ALL = {
     "trendhold": TrendHold,
+    "adaptive": Adaptive,
     "trend": TrendFollowing,
     "momentum": Momentum,
     "mean_reversion": MeanReversion,
@@ -24,4 +26,4 @@ def build(name: str) -> Strategy:
     return ALL[name]()
 
 
-__all__ = ["Strategy", "Ensemble", "MeanReversion", "Momentum", "TrendFollowing", "TrendHold", "ALL", "build"]
+__all__ = ["Adaptive", "Strategy", "Ensemble", "MeanReversion", "Momentum", "TrendFollowing", "TrendHold", "ALL", "build"]
