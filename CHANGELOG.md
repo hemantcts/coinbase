@@ -13,6 +13,11 @@ Optional, off by default; the configured trendhold / BTC+ETH / client paper run 
   within the 10 % per-coin cap, hard stop, take-profit follows the average entry).
 - Two-year backtest: adaptive on BTC+ETH +2.6 % (trendhold +2.1 %); on the top 10 both lose about 15 %.
   See docs/RESEARCH-2026-11-ADAPTIVE.md before enabling.
+- Dashboard: bot status panel (RUNNING / PAUSED / STOPPED with the reason, what it is doing now,
+  strategy, completed / active / pending trades, last signal, last activity, next candle), refreshing
+  every 10 s; Markets table with all top-10 coins (traded or watch-only), price, state, play and reason;
+  open positions show P&L %, stop-loss and take-profit.
+- `WATCH_TOP_N` (default 10): watch-only coins are scored with the same strategy but never traded.
 
 ## 0.7.0 – 16 Oct 2026
 

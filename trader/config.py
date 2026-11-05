@@ -183,6 +183,7 @@ class Settings:
     auto_products: bool = False          # PRODUCTS=auto: trade the top_n coins from trader/universe.py instead
     top_n: int = 10
     universe_refresh_hours: int = 24     # re-rank the coins this often; held coins always stay in the list
+    watch_top_n: int = 10                # without PRODUCTS=auto: score this many top coins for the dashboard, never trade them; 0 = off
     quote_currency: str = "EUR"          # what the pairs settle in
     report_currency: str = "CHF"         # what the owner thinks in
     starting_capital_report: float = 1000.0  # in report currency
@@ -249,6 +250,7 @@ class Settings:
             s.products = [p.strip().upper() for p in raw_products.split(",") if p.strip()]
         s.top_n = int(os.getenv("TOP_N", s.top_n))
         s.universe_refresh_hours = int(os.getenv("UNIVERSE_REFRESH_HOURS", s.universe_refresh_hours))
+        s.watch_top_n = int(os.getenv("WATCH_TOP_N", s.watch_top_n))
         s.quote_currency = os.getenv("QUOTE_CURRENCY", s.quote_currency).upper()
         s.report_currency = os.getenv("REPORT_CURRENCY", s.report_currency).upper()
         s.starting_capital_report = float(os.getenv("STARTING_CAPITAL", s.starting_capital_report))

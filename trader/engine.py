@@ -47,6 +47,8 @@ class Engine:
         self.risk.halt_reset_days = settings.halt_reset_days if mode != "backtest" else self.risk.halt_reset_days
         self.state: PortfolioState | None = None
         self.last_signals: dict[str, Signal] = {}
+        self.watch_products: list[str] = []          # top-N coins that are scored every cycle but not traded
+        self.watch_signals: dict[str, tuple[Signal, float]] = {}
         self.last_rejections: dict[str, str] = {}
         self.consecutive_errors = 0
         self.cycles = 0
@@ -139,7 +141,7 @@ class Engine:
         if self.mode == "live":
             self._reconcile_open_orders(now)
 
-        if s.auto_products and self.mode != "backtest":
+        if (s.auto_products or s.watch_top_n) and self.mode != "backtest":
             self._refresh_universe(now)
 
         if self.mode != "backtest":
@@ -244,14 +246,21 @@ class Engine:
                 self._execute(OrderIntent(product, Side.SELL, last.close, sig, sig.reason), now, last.ts, "SELL")
             self.store.mark_processed(product, last.ts)
 
+        # 4. Watch-only coins: same strategy, never an order. Shows on the dashboard what it would do.
+        if self.mode != "backtest":
+            self._watch(now)
+
         ts = iso(now)
         self.store.save_state(state, ts, self._report_equity(now))
-        if self.last_signals:
+        if self.last_signals or self.watch_signals:
             import json
-            self.store.set_meta("last_signals", json.dumps({
-                k: {"side": v.side.value, "strategy": v.strategy, "reason": v.reason, "expected_move": v.expected_move,
-                    "price": state.last_prices.get(k), "ts": ts}
-                for k, v in self.last_signals.items()}))
+            signals = {k: {"side": v.side.value, "strategy": v.strategy, "reason": v.reason, "expected_move": v.expected_move,
+                           "price": state.last_prices.get(k), "ts": ts, "traded": True}
+                       for k, v in self.last_signals.items() if k in s.products}
+            signals.update({k: {"side": v.side.value, "strategy": v.strategy, "reason": v.reason, "expected_move": v.expected_move,
+                                "price": price, "ts": ts, "traded": False}
+                            for k, (v, price) in self.watch_signals.items() if k in self.watch_products})
+            self.store.set_meta("last_signals", json.dumps(signals))
         return {
             "ts": ts, "cash": state.cash, "equity": state.equity(), "exposure": state.exposure(),
             "positions": {k: round(v.qty, 8) for k, v in state.positions.items()},
@@ -350,12 +359,19 @@ class Engine:
                     self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
 
     def _refresh_universe(self, now: datetime) -> None:
-        """PRODUCTS=auto: re-rank the coins every universe_refresh_hours. Open positions always stay tradeable."""
+        """Re-rank the coins every universe_refresh_hours. PRODUCTS=auto trades them (open positions always stay
+        tradeable); otherwise the top watch_top_n are only watched next to the configured products."""
         from . import universe
         s = self.settings
         if self.universe_at is not None and (now - self.universe_at).total_seconds() < s.universe_refresh_hours * 3600:
             return
         self.universe_at = now
+        if not s.auto_products:
+            top = universe.resolve(self.data, s.universe_file, s.quote_currency, s.watch_top_n, s.products, log=self._print)
+            self.watch_products = [p for p in top if p not in s.products]
+            self.store.set_meta("products", ",".join(s.products))
+            self.store.set_meta("watch_products", ",".join(self.watch_products))
+            return
         held = list(self.state.positions) if self.state else []
         products = universe.resolve(self.data, s.universe_file, s.quote_currency, s.top_n, s.products, keep=held,
                                     log=self._print)
@@ -375,6 +391,20 @@ class Engine:
                                         "removed": [p for p in s.products if p not in usable]})
         s.products = usable
         self.store.set_meta("products", ",".join(usable))
+        self.store.set_meta("watch_products", "")
+
+    def _watch(self, now: datetime) -> None:
+        for product in self.watch_products:
+            try:
+                rows = self.data.closed_candles(product, self.settings.history_candles, now)
+            except Exception as exc:                         # noqa: BLE001  a watched coin must never break a cycle
+                self._log(now, "error", {"product": product, "watch": repr(exc)})
+                continue
+            if not rows:
+                continue
+            sig = self.strategy.evaluate(product, rows, None) if len(rows) >= self.strategy.warmup else \
+                Signal.hold(product, self.strategy.name, "warmup")
+            self.watch_signals[product] = (sig, rows[-1].close)
 
     def _load_evidence(self, now: datetime) -> list[Evidence]:
         """data/evidence.json: a list of Evidence objects maintained by a human or a future pipeline."""
