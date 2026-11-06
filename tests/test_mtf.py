@@ -10,7 +10,7 @@ from trader.models import Candle, Position, Side
 from trader.risk import RiskController
 from trader.store import Store
 from trader.strategies import build
-from trader.strategies.mtf import D1, H1, H6, M15, M30, MultiTimeframe
+from trader.strategies.mtf import D1, H1, H2, H4, M1, M15, M30, MultiTimeframe
 
 T0 = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
 
@@ -34,8 +34,12 @@ def _wavy(g: int, n: int, start: float, up: float, down: float) -> list[Candle]:
 
 
 def _uptrend_frames() -> dict[int, list[Candle]]:
-    return {D1: _series(D1, 150, 50, 0.004), H6: _wavy(H6, 150, 80, 0.02, 0.015),
+    return {D1: _series(D1, 150, 50, 0.004), H4: _wavy(H4, 150, 80, 0.02, 0.015), H2: _series(H2, 150, 90, 0.001),
             H1: _wavy(H1, 150, 95, 0.003, 0.004), M30: _series(M30, 150, 98, 0.0003)}
+
+
+def _calm_minutes(ref: float) -> list[Candle]:
+    return [Candle(T0 + i * M1, ref, ref * 1.001, ref * 0.999, ref, 1.0) for i in range(30)]
 
 
 def _dip_then_recover(n: int = 60) -> list[Candle]:
@@ -83,7 +87,7 @@ def test_live_source_reads_siblings_and_resamples(monkeypatch):
     now = datetime.fromtimestamp(T0 + 300 * 3600, tz=timezone.utc)
     assert len(pub.closed_candles_at("BTC-EUR", 50, now, 3600)) == 50
     assert len(pub.closed_candles_at("BTC-EUR", 500, now, 1800)) == 150
-    assert calls == [3600, 900]
+    assert calls[0] == 3600 and set(calls[1:]) == {900}            # 30m pages back through 15m candles
 
 
 # ---- strategy ------------------------------------------------------------------------------
@@ -91,41 +95,57 @@ def test_live_source_reads_siblings_and_resamples(monkeypatch):
 def test_buys_only_when_every_timeframe_agrees_and_15m_triggers():
     sig = MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames=_uptrend_frames())
     assert sig.side == Side.BUY and sig.strategy == "mtf" and sig.expected_move > 0
-    h6 = _uptrend_frames()[H6]
+    assert "1d+ 4h+ 2h+ 1h+ 30m+ 15m+ 1m+ (1m n/a)" in sig.reason
+    h4 = _uptrend_frames()[H4]
     from trader import indicators as ind
-    assert sig.atr == pytest.approx(ind.atr([c.high for c in h6], [c.low for c in h6], [c.close for c in h6], 14))
+    assert sig.atr == pytest.approx(ind.atr([c.high for c in h4], [c.low for c in h4], [c.close for c in h4], 14))
+
+
+def test_calm_one_minute_data_allows_and_a_sharp_drop_postpones():
+    base = _dip_then_recover()
+    ref = base[-1].close
+    frames = _uptrend_frames()
+    frames[M1] = _calm_minutes(ref)
+    ok = MultiTimeframe().evaluate("BTC-EUR", base, None, frames=frames)
+    assert ok.side == Side.BUY and "(1m n/a)" not in ok.reason
+    frames[M1] = _calm_minutes(ref)[:-1] + [Candle(T0 + 29 * M1, ref, ref, ref * 0.98, ref * 0.98, 1.0)]
+    s = MultiTimeframe().evaluate("BTC-EUR", base, None, frames=frames)
+    assert s.side == Side.HOLD and "1m price unsettled" in s.reason and "1m-" in s.reason
 
 
 def test_no_buy_without_the_15m_trigger():
     steady = _series(M15, 60, 100, 0.0005)
     s = MultiTimeframe().evaluate("BTC-EUR", steady, None, frames=_uptrend_frames())
-    assert s.side == Side.HOLD and "15m trigger" in s.reason
+    assert s.side == Side.HOLD and "15m trigger" in s.reason and "15m-" in s.reason
 
 
-@pytest.mark.parametrize("g, label", [(D1, "1d"), (H6, "6h")])
+@pytest.mark.parametrize("g, label", [(D1, "1d"), (H4, "4h")])
 def test_higher_timeframe_downtrend_blocks_entry(g, label):
     frames = _uptrend_frames()
     frames[g] = _series(g, 150, 100, -0.004)
     s = MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames=frames)
-    assert s.side == Side.HOLD and "no uptrend" in s.reason and label in s.reason
+    assert s.side == Side.HOLD and "no uptrend" in s.reason and f"{label}-" in s.reason
 
 
-@pytest.mark.parametrize("g, label", [(H1, "1h"), (M30, "30m")])
+@pytest.mark.parametrize("g, label", [(H2, "2h"), (H1, "1h"), (M30, "30m")])
 def test_lower_timeframe_momentum_is_required(g, label):
     frames = _uptrend_frames()
     frames[g] = _series(g, 150, 100, -0.002)
     s = MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames=frames)
-    assert s.side == Side.HOLD and label in s.reason and "momentum" in s.reason
+    assert s.side == Side.HOLD and "momentum" in s.reason and f"{label}-" in s.reason
 
 
-def test_exit_on_6h_cross_and_missing_frames_hold():
+def test_exit_on_4h_cross_and_missing_frames_hold():
     frames = _uptrend_frames()
     pos = Position("BTC-EUR", 1.0, 100.0, "x", "mtf", 0.0, 0.0)
     assert MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), pos, frames=frames).side == Side.HOLD
-    frames[H6] = _series(H6, 150, 100, -0.004)
+    frames[H4] = _series(H4, 150, 100, -0.004)
     assert MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), pos, frames=frames).side == Side.SELL
-    assert "timeframes" in MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames={}).reason
-    assert build("mtf").timeframes == (M30, H1, H6, D1)
+    assert "not enough 4h" in MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames={}).reason
+    del frames[H2]
+    frames[H4] = _uptrend_frames()[H4]
+    assert "not enough 2h" in MultiTimeframe().evaluate("BTC-EUR", _dip_then_recover(), None, frames=frames).reason
+    assert build("mtf").timeframes == (M1, M30, H1, H2, H4, D1)
 
 
 # ---- engine ------------------------------------------------------------------------------
@@ -136,8 +156,10 @@ class _Frames:
     def __init__(self):
         self.base = _dip_then_recover(60)
         shift = self.base[-1].ts + M15
+        frames = _uptrend_frames()
+        frames[M1] = _calm_minutes(self.base[-1].close)
         self.frames = {g: [Candle(c.ts - (rows[-1].ts + g) + shift, c.open, c.high, c.low, c.close, c.volume) for c in rows]
-                       for g, rows in _uptrend_frames().items()}
+                       for g, rows in frames.items()}
         self.requested = []
 
     def closed_candles(self, product, n, now):
@@ -148,7 +170,7 @@ class _Frames:
         return [c for c in self.frames[g] if c.ts + g <= now.timestamp()][-n:]
 
 
-def test_engine_passes_frames_buys_and_trails_on_6h_atr():
+def test_engine_passes_all_timeframes_buys_and_trails_on_4h_atr():
     feed = _Frames()
     s = Settings(products=["BTC-EUR"], granularity=M15, report_currency="EUR")
     store = Store(":memory:")
@@ -158,6 +180,22 @@ def test_engine_passes_frames_buys_and_trails_on_6h_atr():
     eng.run_cycle(now)
     pos = eng.state.positions["BTC-EUR"]
     assert pos.strategy == "mtf" and pos.trail_atr_k == PROFILES["client"].atr_multiple and pos.take_profit_price == 0
-    assert set(feed.requested) == {M30, H1, H6, D1} and len(feed.requested) == 4      # once per cycle
-    h6_atr = eng.last_signals["BTC-EUR"].atr
-    assert pos.stop_price == pytest.approx(feed.base[-1].close - 6 * h6_atr, rel=1e-3)
+    assert sorted(feed.requested) == sorted([M1, M30, H1, H2, H4, D1])          # each fetched once per cycle
+    h4_atr = eng.last_signals["BTC-EUR"].atr
+    assert pos.stop_price == pytest.approx(feed.base[-1].close - 6 * h4_atr, rel=1e-3)
+
+
+def test_live_source_pages_back_for_4h(monkeypatch):
+    from datetime import timedelta
+    seen = []
+
+    def fake_candles(self, product, start=None, end=None):
+        seen.append((self.granularity, start is not None))
+        lo = int(start.timestamp()) // 3600 * 3600
+        return [Candle(t, 1, 1, 1, 1, 1) for t in range(lo, int(end.timestamp()) - 3600 + 1, 3600)]
+
+    monkeypatch.setattr(CoinbasePublic, "candles", fake_candles)
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc) + timedelta(minutes=5)
+    rows = CoinbasePublic(900).closed_candles_at("BTC-EUR", 150, now, H4)
+    assert len(rows) == 150 and all(r.ts % H4 == 0 for r in rows) and rows[-1].ts + H4 <= now.timestamp()
+    assert len(seen) >= 2 and all(g == 3600 and paged for g, paged in seen)

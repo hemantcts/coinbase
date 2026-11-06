@@ -101,10 +101,21 @@ class CoinbasePublic:
         sibling = self._siblings.get(src)
         if sibling is None:
             sibling = self._siblings[src] = CoinbasePublic(src, self.timeout, self.store)
-        rows = sibling.closed_candles(product, MAX_CANDLES_PER_REQUEST, now)
-        if src != granularity:
-            rows = [c for c in resample(rows, src, granularity) if c.ts + granularity <= now.timestamp()]
-        return rows[-n:]
+        if src == granularity:
+            return sibling.closed_candles(product, n, now)
+        # A derived candle needs `factor` source candles: page back until there are enough (4h = 4 x 1h).
+        need = (n + 1) * (granularity // src)
+        rows: list[Candle] = []
+        end = now
+        while len(rows) < need:
+            start = end - timedelta(seconds=src * MAX_CANDLES_PER_REQUEST)
+            page = sibling.candles(product, start, end)
+            if not page or (rows and page[0].ts >= rows[0].ts):
+                break                                   # no older data: the product is younger than asked
+            rows = page + [c for c in rows if c.ts > page[-1].ts]
+            end = start
+        rows = [c for c in rows if c.ts + src <= now.timestamp()]
+        return [c for c in resample(rows, src, granularity) if c.ts + granularity <= now.timestamp()][-n:]
 
     def spec(self, product: str) -> ProductSpec:
         if product in self._specs:
