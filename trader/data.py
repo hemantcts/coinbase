@@ -100,7 +100,8 @@ class CoinbasePublic:
         src = source_granularity(granularity)
         sibling = self._siblings.get(src)
         if sibling is None:
-            sibling = self._siblings[src] = CoinbasePublic(src, self.timeout, self.store)
+            # No store: partial recent windows of other timeframes would shadow the full history a backtest needs.
+            sibling = self._siblings[src] = CoinbasePublic(src, self.timeout, None)
         if src == granularity:
             return sibling.closed_candles(product, n, now)
         # A derived candle needs `factor` source candles: page back until there are enough (4h = 4 x 1h).
@@ -194,11 +195,14 @@ class StoreDataSource:
         key = (product, granularity)
         if key not in self._frames:
             rows = self.store.candles(product, granularity)
-            # Not cached at this timeframe: build it from the coarsest cached timeframe that divides it.
+            # Missing or shorter than a finer cached timeframe can rebuild (e.g. 150 recent daily candles next to
+            # two years of 6h): use whichever reaches further back.
             for src in sorted((g for g in GRANULARITIES if g < granularity and granularity % g == 0), reverse=True):
+                built = resample(self.store.candles(product, src), src, granularity)
+                if built and (not rows or built[0].ts < rows[0].ts):
+                    rows = built
                 if rows:
                     break
-                rows = resample(self.store.candles(product, src), src, granularity)
             self._frames[key] = rows
         return self._closed(self._frames[key], granularity, n, now)
 

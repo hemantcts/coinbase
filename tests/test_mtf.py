@@ -199,3 +199,67 @@ def test_live_source_pages_back_for_4h(monkeypatch):
     rows = CoinbasePublic(900).closed_candles_at("BTC-EUR", 150, now, H4)
     assert len(rows) == 150 and all(r.ts % H4 == 0 for r in rows) and rows[-1].ts + H4 <= now.timestamp()
     assert len(seen) >= 2 and all(g == 3600 and paged for g, paged in seen)
+
+
+# ---- regressions from the Nov 17 review ------------------------------------------------------
+
+def test_failed_stop_timeframe_keeps_the_stop_instead_of_trailing_on_15m():
+    from trader.models import Position as P
+
+    class Feed(_Frames):
+        def closed_candles_at(self, product, n, now, g):
+            if g == H4:
+                raise RuntimeError("Coinbase 503")
+            return super().closed_candles_at(product, n, now, g)
+
+    feed = Feed()
+    s = Settings(products=["BTC-EUR"], granularity=M15, report_currency="EUR")
+    eng = Engine(s, Store(":memory:"), PaperBroker(Costs()), build("mtf"), RiskController(PROFILES["client"], Costs()),
+                 feed, mode="backtest", verbose=False)
+    now = datetime.fromtimestamp(feed.base[-1].ts + M15, tz=timezone.utc)
+    eng.init_state(now)
+    eng.state.positions["BTC-EUR"] = P("BTC-EUR", 0.1, 100.0, "x", "mtf", stop_price=50.0, take_profit_price=0.0,
+                                       trail_atr_k=6.0, atr_window=14)
+    eng.run_cycle(now)
+    assert eng.state.positions["BTC-EUR"].stop_price == 50.0       # untouched, not 15m close - 6 x 15m ATR
+
+
+def test_backtest_prefers_full_history_over_a_short_cached_window():
+    store = Store(":memory:")
+    six = _series(H6 := 21600, 4 * 700, 100, 0.0005)
+    store.save_candles("BTC-EUR", H6, six)
+    recent_daily = _series(D1, 150, 100, 0.0005, t0=six[-1].ts + H6 - 150 * D1)
+    store.save_candles("BTC-EUR", D1, recent_daily)               # what a paper run used to leave behind
+    src = StoreDataSource(store, M15)
+    day400 = datetime.fromtimestamp(T0 + 400 * D1, tz=timezone.utc)
+    assert len(src.closed_candles_at("BTC-EUR", 150, day400, D1)) == 150
+
+
+def test_live_siblings_do_not_write_partial_windows_to_the_store(monkeypatch):
+    monkeypatch.setattr(CoinbasePublic, "candles", lambda self, p, start=None, end=None: _series(self.granularity, 300, 100, 0.001))
+    store = Store(":memory:")
+    pub = CoinbasePublic(900, store=store)
+    now = datetime.fromtimestamp(T0 + 400 * D1, tz=timezone.utc)
+    pub.closed_candles_at("BTC-EUR", 50, now, D1)
+    assert store.candles("BTC-EUR", D1) == []
+
+
+def test_watch_only_failures_do_not_count_as_trading_errors(tmp_path):
+    from trader.gate import paper_checks
+
+    class Feed:
+        def closed_candles(self, product, n, now):
+            if product == "DEAD-EUR":
+                raise RuntimeError("404 product not found")
+            return [Candle(T0 + i * M15, 100, 100, 100, 100, 1) for i in range(30) if T0 + (i + 1) * M15 <= now.timestamp()]
+
+    store = Store(":memory:")
+    s = Settings(products=["BTC-EUR"], granularity=M15, data_dir=tmp_path, report_currency="EUR", watch_top_n=0)
+    eng = Engine(s, store, PaperBroker(Costs()), build("trendhold"), RiskController(PROFILES["client"], Costs()), Feed(),
+                 mode="paper", verbose=False)
+    eng.watch_products = ["DEAD-EUR"]
+    for i in range(3):
+        eng.run_cycle(datetime.fromtimestamp(T0 + (27 + i) * M15, tz=timezone.utc))
+    assert store.count_events("watch_error") == 3 and store.count_events("error") == 0
+    rate = next(c for c in paper_checks(store, s, min_hours=0) if c.name == "paper_error_rate")
+    assert rate.passed

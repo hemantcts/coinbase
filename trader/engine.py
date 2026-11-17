@@ -67,6 +67,7 @@ class Engine:
             self.store.set_meta("risk_profile", self.risk.profile.name)
             self.store.set_meta("strategy", self.strategy.name)
             self.store.set_meta("mode", self.mode)
+            self._publish_products()
             self._log(now, "restart", {"cash": existing.cash, "equity": existing.equity(),
                                        "positions": list(existing.positions), "day": existing.day,
                                        "profile": self.risk.profile.name, "strategy": self.strategy.name})
@@ -88,6 +89,7 @@ class Engine:
         self.store.set_meta("fx_source_at_start", source)
         self.store.set_meta("risk_profile", self.risk.profile.name)
         self.store.set_meta("strategy", self.strategy.name)
+        self._publish_products()
         self._log(now, "start", {"capital_report": self.settings.starting_capital_report, "capital_quote": cash,
                                  "fx_rate": rate, "fx_source": source, "profile": self.risk.profile.name,
                                  "strategy": self.strategy.name, "mode": self.mode})
@@ -195,7 +197,10 @@ class Engine:
                 self._execute(intent, now, last.ts, "EXIT", urgent=True)
             elif pos.trail_atr_k > 0:
                 stop_g = getattr(self.strategy, "stop_granularity", 0)
-                trail_rows = self._frames(product, now).get(stop_g, rows) if stop_g else rows
+                frames = self._frames(product, now) if stop_g else {}
+                if stop_g and stop_g not in frames:
+                    continue          # stop timeframe unavailable this cycle: keep the stop, never trail it on base candles
+                trail_rows = frames[stop_g] if stop_g else rows
                 new_stop = self.risk.trail_stop(pos, trail_rows)
                 if new_stop is not None:
                     self._log(now, "trail", {"product": product, "stop": round(new_stop, 2), "close": last.close})
@@ -362,6 +367,12 @@ class Engine:
                         self.store.unmark_processed(fresh.product, candle_ts)
                     self._log(now, "order_retry", {"client_order_id": fresh.client_order_id, "attempt": fresh.attempt})
 
+    def _publish_products(self) -> None:
+        """What the dashboard lists, written at every start so a config change never leaves a stale list behind.
+        The universe refresh overwrites it with the ranked coins on its first cycle."""
+        self.store.set_meta("products", ",".join(self.settings.products))
+        self.store.set_meta("watch_products", "")
+
     def _frames(self, product: str, now: datetime) -> dict[int, list[Candle]]:
         """Higher and lower timeframes the strategy asked for, fetched once per product per cycle."""
         if product not in self._frame_cache:
@@ -370,7 +381,8 @@ class Engine:
                 try:
                     frames[g] = self.data.closed_candles_at(product, self.strategy.frame_history, now, g)
                 except Exception as exc:                     # noqa: BLE001  a missing frame means no signal, not a crash
-                    self._log(now, "error", {"product": product, "timeframe": g, "error": repr(exc)})
+                    kind = "watch_error" if product in self.watch_products else "error"
+                    self._log(now, kind, {"product": product, "timeframe": g, "error": repr(exc)})
             self._frame_cache[product] = frames
         return self._frame_cache[product]
 
@@ -416,15 +428,17 @@ class Engine:
 
     def _watch(self, now: datetime) -> None:
         for product in self.watch_products:
+            # Watch-only coins are never traded, so their failures are logged as "watch_error", not "error":
+            # the release gate's paper error rate counts only errors of the coins that are actually traded.
             try:
                 rows = self.data.closed_candles(product, self.settings.history_candles, now)
+                if not rows:
+                    continue
+                sig = self._evaluate(product, rows, None, now) if len(rows) >= self.strategy.warmup else \
+                    Signal.hold(product, self.strategy.name, "warmup")
             except Exception as exc:                         # noqa: BLE001  a watched coin must never break a cycle
-                self._log(now, "error", {"product": product, "watch": repr(exc)})
+                self._log(now, "watch_error", {"product": product, "error": repr(exc)})
                 continue
-            if not rows:
-                continue
-            sig = self._evaluate(product, rows, None, now) if len(rows) >= self.strategy.warmup else \
-                Signal.hold(product, self.strategy.name, "warmup")
             self.watch_signals[product] = (sig, rows[-1].close)
 
     def _load_evidence(self, now: datetime) -> list[Evidence]:

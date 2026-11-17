@@ -65,11 +65,14 @@ def overview(store: Store, settings: Settings, st: PortfolioState | None, health
         activity = "monitoring"
 
     traded = [p for p in (store.get_meta("products") or "").split(",") if p] or list(settings.products)
+    traded += [p for p in positions if p not in traded]          # a held coin always has a row, whatever the list says
     watched = [p for p in (store.get_meta("watch_products") or "").split(",") if p and p not in traded]
     signals = json.loads(store.get_meta("last_signals") or "{}")
     ranking: dict[str, dict[str, Any]] = {}
     try:
         u = json.loads(settings.universe_file.read_text())
+        if not isinstance(u, dict):
+            raise ValueError("universe.json is not an object")
         ranking = {c["product"]: {"rank": i + 1, "score": c.get("score")} for i, c in enumerate(u.get("coins", []))}
         universe_ts = u.get("ts")
     except (OSError, ValueError, KeyError, TypeError):
@@ -86,7 +89,8 @@ def overview(store: Store, settings: Settings, st: PortfolioState | None, health
         }
         if pos and price:
             row["pnl"] = pos.unrealised(price)
-            row["pnl_pct"] = price / pos.entry_price - 1 if pos.entry_price else None
+            cost = pos.qty * pos.entry_price + pos.entry_fee
+            row["pnl_pct"] = row["pnl"] / cost if cost else None   # same basis as pnl: entry fee included
         coins.append(row)
     coins.sort(key=lambda c: (not c["in_trade"], not c["traded"], c["rank"] or 99))
 

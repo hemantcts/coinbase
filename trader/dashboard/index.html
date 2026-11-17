@@ -227,7 +227,7 @@ const I18N = {
     severe_banner: r => `Verifiziertes Ereignis, keine neuen Käufe: ${r}`,
     viewer_note: "Lesezugriff. Die Not-Aus-Funktionen stehen nur dem Betreiber-Login zur Verfügung.",
     logout: "Abmelden", role_admin: "Betreiber", role_viewer: "Lesezugriff",
-    kinds: { login: "Anmeldung", severe_event: "Schweres Ereignis", start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet" },
+    kinds: { login: "Anmeldung", severe_event: "Schweres Ereignis", start: "Start", restart: "Neustart", fill: "Ausführung", signal: "Signal", rejected: "Abgelehnt", halt: "SPERRE", day_start: "Neuer Tag", trail: "Stop nachgezogen", error: "Fehler", control: "Steuerung", order_open: "Auftrag offen", order_rejected: "Auftrag abgelehnt", order_retry: "Auftrag neu platziert", order_cancelled: "Auftrag storniert", flatten: "Alles verkauft", stale_data: "Kursdaten veraltet", watch_error: "Fehler (nur beobachtet)", universe: "Coin-Liste" },
     status: { FILLED: "ausgeführt", SUBMITTED: "offen", NEW: "neu", PARTIAL: "teilweise", CANCELLED: "storniert", REJECTED: "abgelehnt", UNKNOWN: "unbekannt" },
     empty: "noch nichts", confirm: a => ({ stop: "Neue Käufe wirklich stoppen?", flatten: "Wirklich ALLE Positionen verkaufen?", disarm: "Echtgeld-Freigabe wirklich entfernen?", resume: "Handel fortsetzen?" })[a],
     done: "Ausgeführt", failed: "Fehlgeschlagen", need_token: "Token fehlt oder falsch. Token aus der .env auf dem Server eintragen.", stale_banner: "Der Agent hat seit längerem keinen Zyklus mehr gemeldet. Server prüfen.",
@@ -240,6 +240,7 @@ const I18N = {
     f_strategy: "Strategie", f_completed: "Abgeschlossene Trades", f_active: "Aktive Trades", f_pending: "Offene Aufträge", f_lastsig: "Letztes Signal", f_lastact: "Letzte Aktivität", f_nextcheck: "Nächste Kerze", f_markets: "Märkte",
     traded_watched: (n, w) => `${n} gehandelt · ${w} beobachtet`, ago: s => s < 60 ? `vor ${s} s` : s < 3600 ? `vor ${Math.round(s / 60)} min` : s < 86400 ? `vor ${Math.round(s / 3600)} h` : `vor ${Math.round(s / 86400)} T`, in_: s => s < 3600 ? `in ${Math.max(1, Math.round(s / 60))} min` : `in ${Math.round(s / 3600)} h`,
     updated: s => `aktualisiert ${s}`, nosignal: "noch keines",
+    conn_word: "KEINE VERBINDUNG", conn_msg: "Das Dashboard erreicht den Server nicht", conn_why: a => `Letzte erfolgreiche Abfrage ${a}. Der angezeigte Zustand ist veraltet – Internet oder Server prüfen.`,
     plays: { "trendhold": "Trend-Hold", "mtf": "Multi-Timeframe", "adaptive": "Adaptiv", "adaptive:trend": "Trend", "adaptive:swing": "Swing", "adaptive:dca": "DCA", "risk": "Risiko-Ausstieg", "manual": "Manuell" },
     mk: { rank: "#", mode: "Modus", state: "Zustand", play: "Spielart", signal: "Signal / Grund", pnl: "G/V" },
     mk_mode: { true: "handelt", false: "beobachtet" }, mk_state: { in: "im Trade", buy: "Kaufsignal", sell: "Verkaufssignal", wait: "wartet" },
@@ -271,7 +272,7 @@ const I18N = {
     severe_banner: r => `Verified severe event, no new buys: ${r}`,
     viewer_note: "View-only access. The emergency controls are available to the operator login only.",
     logout: "Sign out", role_admin: "Operator", role_viewer: "View only",
-    kinds: { login: "Login", severe_event: "Severe event", start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale" },
+    kinds: { login: "Login", severe_event: "Severe event", start: "Start", restart: "Restart", fill: "Fill", signal: "Signal", rejected: "Rejected", halt: "HALT", day_start: "New day", trail: "Stop raised", error: "Error", control: "Control", order_open: "Order open", order_rejected: "Order rejected", order_retry: "Order re-priced", order_cancelled: "Order cancelled", flatten: "Flattened", stale_data: "Market data stale", watch_error: "Error (watch-only)", universe: "Coin list" },
     status: { FILLED: "filled", SUBMITTED: "open", NEW: "new", PARTIAL: "partial", CANCELLED: "cancelled", REJECTED: "rejected", UNKNOWN: "unknown" },
     empty: "nothing yet", confirm: a => ({ stop: "Really stop new buys?", flatten: "Really SELL ALL positions?", disarm: "Really remove the live arming?", resume: "Resume trading?" })[a],
     done: "Done", failed: "Failed", need_token: "Token missing or wrong. Enter the token from the .env on the server.", stale_banner: "The engine has not reported a cycle for a while. Check the server.",
@@ -284,6 +285,7 @@ const I18N = {
     f_strategy: "Strategy", f_completed: "Completed trades", f_active: "Active trades", f_pending: "Pending orders", f_lastsig: "Last signal", f_lastact: "Last activity", f_nextcheck: "Next candle", f_markets: "Markets",
     traded_watched: (n, w) => `${n} traded · ${w} watched`, ago: s => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`, in_: s => s < 3600 ? `in ${Math.max(1, Math.round(s / 60))} min` : `in ${Math.round(s / 3600)} h`,
     updated: s => `updated ${s}`, nosignal: "none yet",
+    conn_word: "NO CONNECTION", conn_msg: "The dashboard cannot reach the server", conn_why: a => `Last successful update ${a}. The status shown is out of date – check the internet connection or the server.`,
     plays: { "trendhold": "Trend-hold", "mtf": "Multi-timeframe", "adaptive": "Adaptive", "adaptive:trend": "Trend", "adaptive:swing": "Swing", "adaptive:dca": "DCA", "risk": "Risk exit", "manual": "Manual" },
     mk: { rank: "#", mode: "Mode", state: "State", play: "Play", signal: "Signal / reason", pnl: "P&L" },
     mk_mode: { true: "trading", false: "watching" }, mk_state: { in: "in trade", buy: "buy signal", sell: "sell signal", wait: "waiting" },
@@ -305,11 +307,13 @@ async function api(path, opts = {}) { const r = await fetch(path, { ...opts, hea
 function setLang(l) { LANG = l; localStorage.setItem('lang', l); document.documentElement.lang = l; document.querySelectorAll('[data-i]').forEach(el => { const k = el.dataset.i; const v = T()[k]; if (typeof v === 'string') el.textContent = v; }); document.querySelectorAll('#lang button').forEach(b => b.classList.toggle('on', b.dataset.lang === l)); refresh(); }
 function toast(msg, ms = 2500) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', ms); }
 function pill(id, cls, text) { const el = $(id); el.className = 'pill ' + cls; el.querySelector('span:last-child').textContent = text; }
+// Everything from the database is text: escape it before it goes into innerHTML.
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function table(id, rows, cols) {
   const el = $(id);
   if (!rows.length) { el.innerHTML = `<tr><td class="empty">${T().empty}</td></tr>`; return; }
   el.innerHTML = '<tr>' + cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.h}</th>`).join('') + '</tr>' +
-    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls ? c.cls(r) : ''}">${c.f(r)}</td>`).join('') + '</tr>').join('');
+    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls ? c.cls(r) : ''}">${c.html ? c.f(r) : esc(c.f(r))}</td>`).join('') + '</tr>').join('');
 }
 let CURVE = [], INITIAL = 0;
 function drawChart() {
@@ -356,10 +360,17 @@ function renderStatus(s) {
     [t.f_active, c.active, c.active ? 'up' : '', ''], [t.f_pending, c.pending, c.pending ? 'warnc' : '', ''], [t.f_completed, c.completed, '', ''],
     [t.f_lastsig, sigTxt, ls ? (ls.side === 'BUY' ? 'up' : 'down') : '', ls ? ago(ls.ts) : ''],
     [t.f_lastact, ago(b.last_activity_at), b.status === 'STOPPED' ? 'down' : '', dt(b.last_activity_at)],
-    [t.f_nextcheck, b.status === 'STOPPED' ? '–' : t.in_(next), '', `${Math.round(g / 3600)} h`],
-  ].map(([l, v, cl, sub]) => `<div class="mini"><div class="l">${l}</div><div class="v ${cl}">${v}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`).join('');
+    [t.f_nextcheck, b.status === 'STOPPED' ? '–' : t.in_(next), '', g < 3600 ? `${Math.round(g / 60)} min` : `${Math.round(g / 3600)} h`],
+  ].map(([l, v, cl, sub]) => `<div class="mini"><div class="l">${esc(l)}</div><div class="v ${cl}">${esc(v)}</div>${sub ? `<div class="l">${esc(sub)}</div>` : ''}</div>`).join('');
 }
-setInterval(() => { if (LAST_OK) $('updated').textContent = T().updated(ago(LAST_OK)); if (LAST_STATE) renderStatus(LAST_STATE); }, 1000);
+setInterval(() => {
+  if (LAST_OK) $('updated').textContent = T().updated(ago(LAST_OK));
+  if (LAST_STATE) renderStatus(LAST_STATE);
+  if (LAST_OK && Date.now() - new Date(LAST_OK) > 35000) {   // three missed 10 s refreshes: the shown status is unknown
+    $('light').className = 'light stop'; $('st-word').textContent = T().conn_word;
+    $('st-msg').textContent = T().conn_msg; $('st-why').textContent = T().conn_why(ago(LAST_OK));
+  }
+}, 1000);
 function reasonText(r) { const m = T().reasons; for (const k in m) if ((r || '').startsWith(k)) return m[k]; return r || ''; }
 async function refresh() {
   const t = T();
@@ -394,8 +405,8 @@ async function refresh() {
       [t.dataq, dq.age_seconds >= 0 ? (dq.ok ? t.data_ok : t.data_stale) + ' · ' + t.data_age(Math.round(dq.age_seconds / 60)) : '–', dq.ok ? 'up' : 'down'], [t.started, dt(s.started_at)],
     ].map(([l, v, c]) => `<div class="mini"><div class="l">${l}</div><div class="v ${c || ''}">${v}</div></div>`).join('');
     $('fxnote').textContent = r ? t.fxnote(rep, q, fmt(r.fx_rate, 4), dt(r.fx_rate_ts)) : '';
-    const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee, upct: (last / p.entry_price - 1) * 100 }; });
-    table('positions', pos, [{ h: t.th.product, f: r => `<b>${r.product}</b>` }, { h: t.th.strategy, f: r => playName(r.strategy) + (r.dca_level ? ` · L${r.dca_level + 1}` : '') }, { h: t.th.qty, f: r => fmt(r.qty, 6), num: 1 }, { h: t.th.entry, f: r => fmt(r.entry_price), num: 1 }, { h: t.th.last, f: r => fmt(r.last), num: 1 },
+    const pos = Object.values(st.positions || {}).map(p => { const last = (st.last_prices || {})[p.product] || p.entry_price; return { ...p, last, upnl: p.qty * (last - p.entry_price) - p.entry_fee, upct: (p.qty * (last - p.entry_price) - p.entry_fee) / (p.qty * p.entry_price + p.entry_fee) * 100 }; });
+    table('positions', pos, [{ h: t.th.product, f: r => `<b>${esc(r.product)}</b>`, html: 1 }, { h: t.th.strategy, f: r => playName(r.strategy) + (r.dca_level ? ` · L${r.dca_level + 1}` : '') }, { h: t.th.qty, f: r => fmt(r.qty, 6), num: 1 }, { h: t.th.entry, f: r => fmt(r.entry_price), num: 1 }, { h: t.th.last, f: r => fmt(r.last), num: 1 },
       { h: t.th.upnl, f: r => fmt(r.upnl), num: 1, cls: r => r.upnl >= 0 ? 'up' : 'down' }, { h: t.th_pnlpct, f: r => pct(r.upct), num: 1, cls: r => r.upct >= 0 ? 'up' : 'down' },
       { h: t.th_sl, f: r => r.stop_price ? fmt(r.stop_price) : '–', num: 1, cls: () => 'down' }, { h: t.th_tp, f: r => r.take_profit_price ? fmt(r.take_profit_price) : (r.trail_atr_k ? '↗ trail' : '–'), num: 1, cls: () => 'up' }]);
     renderStatus(s);
@@ -404,10 +415,10 @@ async function refresh() {
     const bot = s.bot || { coins: [] };
     $('markets-sub').textContent = t.markets_sub(bot.universe_ts ? dt(bot.universe_ts) : '');
     table('markets', bot.coins, [
-      { h: t.mk.rank, f: r => r.rank ?? '–', num: 1 }, { h: t.th.product, f: r => `<b>${r.product}</b>` },
-      { h: t.mk.mode, f: r => `<span class="badge ${r.traded ? 'info' : ''}">${t.mk_mode[r.traded]}</span>` },
+      { h: t.mk.rank, f: r => r.rank ?? '–', num: 1 }, { h: t.th.product, f: r => `<b>${esc(r.product)}</b>`, html: 1 },
+      { h: t.mk.mode, f: r => `<span class="badge ${r.traded ? 'info' : ''}">${t.mk_mode[r.traded]}</span>`, html: 1 },
       { h: t.th.price + ` (${q})`, f: r => fmt(r.price, r.price && r.price < 10 ? 4 : 2), num: 1 },
-      { h: t.mk.state, f: r => { const k = r.in_trade ? 'in' : r.side === 'BUY' ? 'buy' : r.side === 'SELL' ? 'sell' : 'wait'; return `<span class="badge ${({ in: 'ok', buy: 'ok', sell: 'bad', wait: '' })[k]}">${t.mk_state[k]}</span>`; } },
+      { h: t.mk.state, f: r => { const k = r.in_trade ? 'in' : r.side === 'BUY' ? 'buy' : r.side === 'SELL' ? 'sell' : 'wait'; return `<span class="badge ${({ in: 'ok', buy: 'ok', sell: 'bad', wait: '' })[k]}">${t.mk_state[k]}</span>`; }, html: 1 },
       { h: t.mk.play, f: r => playName(r.play) },
       { h: t.mk.pnl, f: r => r.pnl == null ? '–' : `${fmt(r.pnl)} (${pct(r.pnl_pct * 100)})`, num: 1, cls: r => r.pnl == null ? '' : r.pnl >= 0 ? 'up' : 'down' },
       { h: t.mk.signal, f: r => reasonText(r.reason) || '–', cls: () => 'wrap' }]);
@@ -415,12 +426,12 @@ async function refresh() {
     const eq = await api('/api/equity?limit=3000'); CURVE = eq; INITIAL = st.initial_capital || 0; drawChart();
     $('eqrange').textContent = eq.length ? `${dt(eq[0].ts)} – ${dt(eq[eq.length - 1].ts)} · ${q}` : '';
     const orders = await api('/api/orders?limit=100');
-    table('orders', orders, [{ h: t.th.time, f: r => dt(r.updated_at) }, { h: t.th.side, f: r => `<span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${t.sides[r.side] || r.side}</span>` }, { h: t.th.product, f: r => r.product },
+    table('orders', orders, [{ h: t.th.time, f: r => dt(r.updated_at) }, { h: t.th.side, f: r => `<span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(t.sides[r.side] || r.side)}</span>`, html: 1 }, { h: t.th.product, f: r => r.product },
       { h: t.th.qty, f: r => fmt(r.filled_qty || r.qty, 6), num: 1 }, { h: t.th.price, f: r => fmt(r.avg_fill_price || r.price), num: 1 }, { h: t.th.fee, f: r => fmt(r.fee, 4), num: 1 },
       { h: t.th.pnl, f: r => r.pnl == null ? '–' : fmt(r.pnl), num: 1, cls: r => r.pnl >= 0 ? 'up' : 'down' }, { h: t.th.status, f: r => t.status[r.status] || r.status }, { h: t.th.strategy, f: r => r.strategy }, { h: t.th.reason, f: r => r.reason }]);
     LAST_OK = new Date().toISOString();
     const ev = await api('/api/events?limit=150');
-    table('events', ev, [{ h: t.th.time, f: r => dt(r.ts) }, { h: t.th.kind, f: r => t.kinds[r.kind] || r.kind, cls: r => ({ halt: 'down', error: 'down', fill: 'up', order_rejected: 'warnc' })[r.kind] || '' }, { h: t.th.detail, f: r => r.detail.length > 170 ? r.detail.slice(0, 170) + '…' : r.detail }]);
+    table('events', ev, [{ h: t.th.time, f: r => dt(r.ts) }, { h: t.th.kind, f: r => t.kinds[r.kind] || r.kind, cls: r => ({ halt: 'down', error: 'down', watch_error: 'warnc', fill: 'up', order_rejected: 'warnc' })[r.kind] || '' }, { h: t.th.detail, f: r => r.detail.length > 170 ? r.detail.slice(0, 170) + '…' : r.detail }]);
   } catch (e) {
     if (e.status === 401) { if (localStorage.getItem('token')) { $('meta').textContent = t.need_token; pill('p-engine', '', '…'); } else { location.href = '/login'; } } else { $('meta').textContent = (t.failed) + ': ' + e.message; }
   }

@@ -117,3 +117,48 @@ def test_watched_coins_get_signals_but_never_orders(tmp_path: Path):
     assert {o["product"] for o in store.orders()} == {"BTC-EUR"}
     sig = json.loads(store.get_meta("last_signals"))
     assert sig["SOL-EUR"]["side"] == "BUY" and sig["SOL-EUR"]["traded"] is False and sig["BTC-EUR"]["traded"] is True
+
+
+def test_held_coin_always_listed_and_odd_universe_file_is_not_a_500(tmp_path: Path):
+    s = _seeded(tmp_path)
+    store = Store(s.database)
+    st = store.load_state()
+    st.positions["DOGE-EUR"] = Position("DOGE-EUR", 10.0, 0.1, iso(utcnow()), "trendhold", 0.09, 0.0)
+    store.save_state(st, iso(utcnow()))
+    (tmp_path / "universe.json").write_text("[]")
+    r = TestClient(create_app(s)).get("/api/state", headers=H)
+    assert r.status_code == 200
+    coins = {c["product"]: c for c in r.json()["bot"]["coins"]}
+    assert coins["DOGE-EUR"]["in_trade"] and coins["DOGE-EUR"]["traded"]
+
+
+def test_pnl_percent_uses_the_same_fee_basis_as_the_amount(tmp_path: Path):
+    s = _seeded(tmp_path)
+    store = Store(s.database)
+    st = store.load_state()
+    st.positions["BTC-EUR"] = Position("BTC-EUR", 1.0, 100.0, iso(utcnow()), "trendhold", 90.0, 0.0, entry_fee=1.2)
+    st.last_prices["BTC-EUR"] = 100.5
+    store.save_state(st, iso(utcnow()))
+    btc = next(c for c in TestClient(create_app(s)).get("/api/state", headers=H).json()["bot"]["coins"] if c["product"] == "BTC-EUR")
+    assert btc["pnl"] < 0 and btc["pnl_pct"] < 0                 # both say "loss": 0.5 gain does not cover the 1.2 fee
+
+
+def test_engine_restart_rewrites_the_dashboard_product_list(tmp_path: Path):
+    from trader.config import Costs, PROFILES
+    from trader.engine import Engine
+    from trader.execution.paper import PaperBroker
+    from trader.risk import RiskController
+    from trader.strategies import build
+    store = Store(":memory:")
+    store.set_meta("products", "BTC-EUR,ETH-EUR,SOL-EUR")
+    store.set_meta("watch_products", "XRP-EUR")
+    s = Settings(products=["BTC-EUR"], data_dir=tmp_path, report_currency="EUR", watch_top_n=0)
+    Engine(s, store, PaperBroker(Costs()), build("trendhold"), RiskController(PROFILES["client"], Costs()), None,
+           mode="paper", verbose=False).init_state()
+    assert store.get_meta("products") == "BTC-EUR" and store.get_meta("watch_products") == ""
+
+
+def test_page_escapes_database_text_and_flags_a_lost_connection(tmp_path: Path):
+    html = TestClient(create_app(Settings(data_dir=tmp_path, dashboard_token="t"))).get("/").text
+    assert "const esc = " in html and "c.html ? c.f(r) : esc(c.f(r))" in html
+    assert "conn_word" in html and "NO CONNECTION" in html and "KEINE VERBINDUNG" in html
