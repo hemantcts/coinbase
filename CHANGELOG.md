@@ -18,6 +18,30 @@ Optional, off by default; the configured trendhold / BTC+ETH / client paper run 
   every 10 s; Markets table with all top-10 coins (traded or watch-only), price, state, play and reason;
   open positions show P&L %, stop-loss and take-profit.
 - `WATCH_TOP_N` (default 10): watch-only coins are scored with the same strategy but never traded.
+- `STRATEGY=mtf` with `GRANULARITY=900`: analyses seven timeframes. 1d + 4h set the direction, 2h + 1h +
+  30m confirm momentum, a 15m close back above its EMA 20 triggers the entry and 1m checks the price is
+  calm at that moment; exits and the 6x ATR trailing stop are on 4h. 30m, 2h and 4h are resampled from
+  15m / 1h. Each HOLD reason lists every timeframe as + or -, shown on the dashboard. Two-year backtest on
+  BTC+ETH: +1.2 % (worst −0.8 %) vs trendhold +2.1 % (worst −1.6 %); see docs/RESEARCH-2026-11-MTF.md.
+
+Fixes from the review of 17 Nov 2026 (each with a regression test):
+
+- Trailing stop: if the stop timeframe (4h for mtf) cannot be fetched, the stop is kept for that cycle
+  instead of being trailed on 15m candles, which raised it permanently and stopped positions out on noise.
+- Candle cache: extra timeframes fetched live are no longer written to the database; backtests use the
+  longest history available, so a paper run's recent daily candles cannot starve the mtf backtest or the
+  gate's Phase A.
+- Errors on watch-only coins are logged as `watch_error` and no longer count towards the gate's paper
+  error rate; a strategy error on a watched coin can no longer interrupt a cycle.
+- Dashboard: a held coin always appears in the markets table, and the list is rewritten at every engine
+  start; P&L % includes the entry fee like the P&L amount; a malformed universe.json no longer causes
+  HTTP 500; 15m candles show "15 min" instead of "0 h"; text from the database is escaped before display;
+  after three missed refreshes the status panel shows NO CONNECTION instead of the last green status.
+
+Open question for the client: the risk controller sizes every entry by `risk_per_trade` / `stop_loss_pct`
+(2 %), while trendhold's real stop is 6 x ATR (often 8-12 %) and the DCA ladder's is 18 %. Actual risk per
+trade is therefore about 1 % of capital rather than 0.25 %. Unchanged, because tightening it would cut
+positions to about a fifth and change the running paper test; decide before going live.
 
 ## 0.7.0 – 16 Oct 2026
 
